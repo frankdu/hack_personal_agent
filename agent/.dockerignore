@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+**/dist
+**/.output
+**/.tanstack
+**/.nitro
+**/.vite
+.git
+.env
+.env.*
+!.env.example
+.data
+.state
+workspace
+research-docs
+coverage
+**/*.tsbuildinfo

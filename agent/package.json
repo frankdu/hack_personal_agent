@@ -1,0 +1,27 @@
+{
+  "name": "personal-agent-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": ["apps/*", "packages/*"],
+  "engines": { "node": ">=24.12.0 <25", "npm": ">=11 <12" },
+  "packageManager": "npm@11.19.1",
+  "scripts": {
+    "dev": "npm run build:packages && concurrently --kill-others --names contracts,frontend,node \"npm run dev -w @agent/contracts\" \"npm run dev -w @agent/agent-frontend\" \"npm run dev -w @agent/node-agent\"",
+    "dev:frontend": "npm run dev -w @agent/agent-frontend",
+    "dev:node": "npm run build:packages && npm run dev -w @agent/node-agent",
+    "build:packages": "npm run build -w @agent/contracts",
+    "build": "npm run build:packages && npm run build -w @agent/node-agent && npm run build -w @agent/agent-frontend",
+    "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present",
+    "test": "npm run build:packages && npm run test --workspaces --if-present",
+    "check": "npm run build && npm run typecheck && npm test",
+    "compose:dev": "docker compose -f compose.yaml -f compose.dev.yaml up --build",
+    "compose:prod": "docker compose -f compose.yaml up --build -d"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "concurrently": "10.0.7",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  }
+}

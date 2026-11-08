@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.output/
+.tanstack/
+.nitro/
+.vite/
+coverage/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+.data/
+.state/
+workspace/
+/research*
+
+# The repository's Python ignore rules exclude directories named lib.
+!apps/agent-frontend/src/lib/
+!apps/agent-frontend/src/lib/**

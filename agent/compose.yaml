@@ -1,0 +1,71 @@
+name: personal-agent
+
+# Production baseline. Add compose.dev.yaml for DEV source watching.
+# The backend and model runtime are designed, not implemented in this scaffold.
+services:
+  postgres:
+    image: postgres:18-bookworm
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-agent}
+      POSTGRES_USER: ${POSTGRES_USER:-agent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in agent/.env}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  agent-frontend:
+    build:
+      context: .
+      target: frontend-production
+    environment:
+      MODE: PROD
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+    ports:
+      - "${FRONTEND_BIND:-127.0.0.1}:${FRONTEND_PORT:-3000}:3000"
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  node-agent:
+    profiles: [node]
+    build:
+      context: .
+      target: node-production
+    environment:
+      MODE: PROD
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3101"
+      ENABLED_TOOLS: ""
+      NODE_STATE_DIR: /data
+      AGENT_WORKSPACE_DIR: /work
+    ports:
+      - "127.0.0.1:${NODE_AGENT_PORT:-3101}:3101"
+    volumes:
+      - node-data:/data
+      - node-work:/work
+    init: true
+    stop_grace_period: 30s
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3101/health/live').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres-data:
+  node-data:
+  node-work:

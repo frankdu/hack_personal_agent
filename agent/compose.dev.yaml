@@ -1,0 +1,26 @@
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+
+  agent-frontend:
+    build:
+      target: development
+    command: [npm, run, dev, --workspace, "@agent/agent-frontend", --, --host, "0.0.0.0"]
+    environment:
+      MODE: DEV
+      NODE_ENV: development
+    volumes:
+      - ./apps/agent-frontend/src:/workspace/apps/agent-frontend/src
+    restart: "no"
+
+  node-agent:
+    build:
+      target: development
+    command: [npm, run, dev, --workspace, "@agent/node-agent"]
+    environment:
+      MODE: DEV
+      NODE_ENV: development
+    volumes:
+      - ./apps/node-agent/src:/workspace/apps/node-agent/src
+    restart: "no"
