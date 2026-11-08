@@ -12,6 +12,7 @@ import {
   type Lease,
   type FleetNode,
   type Conversation,
+  type ConversationSummary,
   type Message,
   type Task,
   type Decision,
@@ -329,6 +330,22 @@ export class Store {
       JSON.stringify(body),
     ]);
     return body;
+  }
+  async conversations(): Promise<ConversationSummary[]> {
+    const { rows } = await this.pool.query(`
+      SELECT id,
+        COALESCE(NULLIF(LEFT(body->'messages'->0->>'text', 100), ''), 'Untitled conversation') AS title,
+        COALESCE((body->'messages'->-1->>'createdAt')::timestamptz, created_at) AS updated_at,
+        body->>'activeTaskId' AS active_task_id
+      FROM conversations
+      ORDER BY updated_at DESC, created_at DESC, id
+    `);
+    return rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      updatedAt: row.updated_at.toISOString(),
+      activeTaskId: row.active_task_id,
+    }));
   }
   async conversation(
     id: string,

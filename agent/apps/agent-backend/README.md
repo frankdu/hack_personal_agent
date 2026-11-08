@@ -14,6 +14,8 @@ The adapter follows TypeSafe's [Choice REST contract](https://docs.typesafe.ai/p
 
 Eligibility checks fresh leases, model readiness, workspace IDs, tool subsets and available task slots. Optional `routing.modelId` in both auto and manual routing restricts placements to that exact model ID before selection and again under the placement lock. Omitting it means Auto model. A model preference never activates an inactive model or falls back to another model. One matching node bypasses Jev, including when it exposes multiple matching profiles; multiple matching nodes use the usual judgment/fallback policy. Context admission deliberately uses a conservative character-count estimate; it is not a tokenizer. Profiles are node-reported, and initial deterministic scoring is not a learned latency predictor. Actual workspace revision matching, calibrated outcome learning, split inference/tool placement, context compaction and sticky routing are deferred.
 
+The authenticated `GET /v1/conversations` endpoint returns conversation summaries (ID, first-message title, latest-message timestamp and active task ID) ordered by recent activity. It includes conversations created by older clients without messages, using an untitled label. Message histories are loaded separately through `GET /v1/conversations/:id`.
+
 ## Durability and recovery
 
 A transaction writes the user message, routing reason/evidence, task, attempt and outbox before dispatch. The task request key is unique within its conversation. An identical key with different input returns conflict. Dispatch records send intent, then contacts only an allowlisted endpoint without following redirects.

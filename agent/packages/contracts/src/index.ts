@@ -173,6 +173,16 @@ export const conversationSchema = z.object({
   activeTaskId: id.nullable(),
 });
 export type Conversation = z.infer<typeof conversationSchema>;
+export const conversationSummarySchema = z.object({
+  id,
+  title: z.string(),
+  updatedAt: time,
+  activeTaskId: id.nullable(),
+});
+export type ConversationSummary = z.infer<typeof conversationSummarySchema>;
+export const conversationsResponseSchema = z.object({
+  conversations: z.array(conversationSummarySchema),
+});
 export const taskStatusSchema = z.enum([
   "queued",
   "running",

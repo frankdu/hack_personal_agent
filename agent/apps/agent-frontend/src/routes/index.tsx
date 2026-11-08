@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   conversationSchema,
+  conversationsResponseSchema,
   decisionSchema,
   enabledToolSchema,
   modelSelectionResponseSchema,
@@ -22,7 +23,6 @@ import {
   Cpu,
   Layers3,
   LoaderCircle,
-  MessageSquare,
   Network,
   Plus,
   Power,
@@ -36,6 +36,7 @@ import {
   Unplug,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConversationList } from "@/components/conversation-list";
 import {
   apiRequest,
   errorText,
@@ -217,7 +218,6 @@ function ChatWorkspace({
   const [allowHostedJudgment, setAllowHostedJudgment] = useState(true);
   const [allowRulesFallback, setAllowRulesFallback] = useState(true);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [resumeId, setResumeId] = useState("");
   const [lastTaskId, setLastTaskId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -240,6 +240,21 @@ function ChatWorkspace({
     enabled: !!connection,
     queryFn: ({ signal }) =>
       apiRequest(connection!, "/v1/nodes", nodesResponseSchema, { signal }),
+    refetchInterval: 3_000,
+    retry: false,
+  });
+  const conversationsQuery = useQuery({
+    queryKey: [...prefix, "conversations"],
+    enabled: !!connection,
+    queryFn: ({ signal }) =>
+      apiRequest(
+        connection!,
+        "/v1/conversations",
+        conversationsResponseSchema,
+        {
+          signal,
+        },
+      ),
     refetchInterval: 3_000,
     retry: false,
   });
@@ -325,6 +340,7 @@ function ChatWorkspace({
 
   async function performSubmit(existing?: PendingSubmission) {
     if (!connection || submitLock.current) return;
+    if (!existing && !draft.trim()) return;
     submitLock.current = true;
     setSubmitting(true);
     setActionError("");
@@ -415,6 +431,10 @@ function ChatWorkspace({
           queryKey: [...prefix, "conversation", conversationId],
         });
     } finally {
+      if (live.current)
+        void queryClient.invalidateQueries({
+          queryKey: [...prefix, "conversations"],
+        });
       submitLock.current = false;
       if (live.current) setSubmitting(false);
     }
@@ -465,27 +485,11 @@ function ChatWorkspace({
     void queryClient.invalidateQueries({ queryKey: [...prefix, "nodes"] });
   }
 
-  function newConversation() {
+  function openConversation(id: string | null) {
     if (active || submitting || pending) return;
-    setConversationId(null);
+    setConversationId(id);
     setLastTaskId(null);
     setDraft("");
-    setActionError("");
-    setResumeId("");
-  }
-  function resumeConversation(event: FormEvent) {
-    event.preventDefault();
-    if (active || submitting || pending) return;
-    if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        resumeId.trim(),
-      )
-    ) {
-      setActionError("Enter a valid conversation ID.");
-      return;
-    }
-    setConversationId(resumeId.trim());
-    setLastTaskId(null);
     setActionError("");
   }
   const sendDisabled =
@@ -498,6 +502,7 @@ function ChatWorkspace({
     nodesQuery.isPending ||
     !!routingProblem ||
     !workspaceId.trim() ||
+    (!!conversationId && conversationQuery.isPending) ||
     !!conversationQuery.error;
 
   return (
@@ -515,15 +520,11 @@ function ChatWorkspace({
           variant="outline"
           className="new-chat"
           disabled={active || submitting || !!pending}
-          onClick={newConversation}
+          onClick={() => openConversation(null)}
         >
           <Plus /> New conversation
         </Button>
         <div className="sidebar-label">WORKSPACE</div>
-        <div className="nav-active">
-          <MessageSquare size={16} /> Conversation
-          <span className="nav-dot" />
-        </div>
         <a className="nav-item" href="#connected-nodes">
           <Network size={16} /> Connected nodes
           <span className="count">{onlineNodes.length}</span>
@@ -540,22 +541,19 @@ function ChatWorkspace({
           </button>
         )}
         {connection && (
-          <form className="resume-form" onSubmit={resumeConversation}>
-            <label htmlFor="resume-id">Resume a conversation</label>
-            <input
-              id="resume-id"
-              value={resumeId}
-              onChange={(event) => setResumeId(event.target.value)}
-              placeholder="Conversation ID"
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={active || submitting || !!pending || !resumeId.trim()}
-            >
-              Open
-            </Button>
-          </form>
+          <ConversationList
+            conversations={conversationsQuery.data?.conversations ?? []}
+            selectedId={conversationId}
+            loading={conversationsQuery.isPending}
+            error={
+              conversationsQuery.error
+                ? errorText(conversationsQuery.error)
+                : null
+            }
+            disabled={active || submitting || !!pending}
+            onSelect={openConversation}
+            onRetry={() => void conversationsQuery.refetch()}
+          />
         )}
         <div className="sidebar-bottom">
           <span className="avatar">P</span>
@@ -590,7 +588,6 @@ function ChatWorkspace({
         {conversationId && (
           <div className="conversation-reference">
             Conversation <code>{conversationId}</code>
-            <span>Save this ID to resume after reconnecting.</span>
           </div>
         )}
         <div

@@ -176,6 +176,10 @@ export async function startBackend(
       json(res, 202, await store.selectModel(nodeModel[1]!, input.profileId));
       return;
     }
+    if (req.method === "GET" && path === "/v1/conversations") {
+      json(res, 200, { conversations: await store.conversations() });
+      return;
+    }
     if (req.method === "POST" && path === "/v1/conversations") {
       json(res, 201, await store.createConversation());
       return;

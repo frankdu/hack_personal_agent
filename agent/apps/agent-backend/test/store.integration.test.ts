@@ -2,7 +2,11 @@ import { afterAll, beforeAll, describe, test, vi } from "vitest";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
-import { registrationSchema, submitMessageSchema } from "@agent/contracts";
+import {
+  conversationsResponseSchema,
+  registrationSchema,
+  submitMessageSchema,
+} from "@agent/contracts";
 import { readConfig } from "../src/config.js";
 import { startBackend } from "../src/server.js";
 import { Dispatcher } from "../src/dispatcher.js";
@@ -125,6 +129,83 @@ describe(
         cors.headers.get("access-control-allow-origin"),
         "http://localhost:3000",
       );
+    });
+    test("conversation list is authenticated, read-only and ordered by latest message", async () => {
+      for (const token of ["", config.nodeToken]) {
+        const response = await fetch(`${http}/v1/conversations`, {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        assert.equal(response.status, 401);
+      }
+      const list = async () => {
+        const response = await fetch(`${http}/v1/conversations`, {
+          headers: { authorization: `Bearer ${config.apiToken}` },
+        });
+        assert.equal(response.status, 200);
+        return conversationsResponseSchema.parse(await response.json())
+          .conversations;
+      };
+      assert.deepEqual(await list(), []);
+      assert.deepEqual(await list(), []);
+      const older = await app.store.createConversation();
+      const newer = await app.store.createConversation();
+      const empty = await app.store.createConversation();
+      try {
+        for (const [chat, date] of [
+          [older, "2026-11-07T12:00:00.000Z"],
+          [newer, "2026-11-08T12:00:00.000Z"],
+        ] as const) {
+          await app.store.pool.query(
+            "UPDATE conversations SET body=$2 WHERE id=$1",
+            [
+              chat.id,
+              JSON.stringify({
+                ...chat,
+                activeTaskId: chat.id,
+                messages: [
+                  {
+                    id: randomUUID(),
+                    role: "user",
+                    text: "Hello ".repeat(30),
+                    createdAt: "2026-11-06T12:00:00.000Z",
+                    taskId: chat.id,
+                  },
+                  {
+                    id: randomUUID(),
+                    role: "assistant",
+                    text: "Latest reply",
+                    createdAt: date,
+                    taskId: chat.id,
+                  },
+                ],
+              }),
+            ],
+          );
+        }
+        await app.store.pool.query(
+          "UPDATE conversations SET created_at=$2 WHERE id=$1",
+          [empty.id, "2026-11-05T12:00:00.000Z"],
+        );
+        const summaries = await list();
+        assert.deepEqual(
+          summaries.map((chat) => chat.id),
+          [newer.id, older.id, empty.id],
+        );
+        assert.deepEqual(summaries[0], {
+          id: newer.id,
+          title: "Hello ".repeat(30).slice(0, 100),
+          updatedAt: "2026-11-08T12:00:00.000Z",
+          activeTaskId: newer.id,
+        });
+        assert.equal(summaries[2]!.title, "Untitled conversation");
+        assert.equal(summaries[2]!.activeTaskId, null);
+      } finally {
+        await app.store.pool.query(
+          "DELETE FROM conversations WHERE id = ANY($1::uuid[])",
+          [[older.id, newer.id, empty.id]],
+        );
+      }
+      assert.deepEqual(await list(), []);
     });
     test("registration allowlist, boot fencing and heartbeat order", async () => {
       await assert.rejects(

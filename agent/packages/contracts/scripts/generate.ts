@@ -82,6 +82,7 @@ const document = {
       post: operation("heartbeatSchema", "leaseSchema", true),
     },
     "/v1/conversations": {
+      get: operation(null, "conversationsResponseSchema"),
       post: operation(null, "conversationSchema", false, "201"),
     },
     "/v1/conversations/{conversationId}": {
