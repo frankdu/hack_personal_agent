@@ -10,7 +10,11 @@ import {
   type Lease,
 } from "@agent/contracts";
 import { readConfig } from "../src/config.js";
-import { Executions, type Executor } from "../src/executions.js";
+import {
+  ExecutionError,
+  Executions,
+  type Executor,
+} from "../src/executions.js";
 import { durableWrite } from "../src/storage.js";
 
 function digest(
@@ -81,6 +85,27 @@ async function settled(executions: Executions, id: string) {
   }
   throw new Error("Execution did not settle");
 }
+test("truncated output is persisted as failed with an actionable error", async () => {
+  const f = await fixture({
+    run: async (_request, hooks) => {
+      await hooks.output("Partial response");
+      throw new ExecutionError("model_output_truncated");
+    },
+  });
+  try {
+    await f.executions.accept(f.request);
+    const snapshot = await settled(f.executions, f.request.attemptId);
+    assert.equal(snapshot.status, "failed");
+    assert.equal(snapshot.output, "Partial response");
+    assert.equal(
+      snapshot.error,
+      "Model response reached its token limit and is incomplete.",
+    );
+    assert.equal(f.executions.ready(), true);
+  } finally {
+    await f.cleanup();
+  }
+});
 test("durable acceptance, input digest deduplication, fencing, and single execution slot", async () => {
   let calls = 0;
   let unblock!: () => void;

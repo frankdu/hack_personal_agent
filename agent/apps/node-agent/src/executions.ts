@@ -37,6 +37,12 @@ export interface Executor {
     signal: AbortSignal,
   ): Promise<string>;
 }
+/** Known failures that are safe to explain to the operator. */
+export class ExecutionError extends Error {
+  constructor(readonly code: "model_output_truncated") {
+    super("Model response reached its token limit and is incomplete.");
+  }
+}
 interface ToolRecord {
   name: string;
   digest: string;
@@ -329,7 +335,7 @@ export class Executions {
         this.abort("lease_lost");
       if (controller.signal.aborted) throw new Error("Execution aborted");
       await this.update(record, { status: "succeeded", output, error: null });
-    } catch {
+    } catch (error) {
       const reason = this.active?.reason;
       const uncertainTool = Object.values(record.tools).some((tool) =>
         ["running", "unknown"].includes(tool.status),
@@ -343,7 +349,11 @@ export class Executions {
             : "failed";
       await this.update(record, {
         status,
-        error: reason ?? "execution_failed",
+        error:
+          reason ??
+          (error instanceof ExecutionError
+            ? error.message
+            : "execution_failed"),
       }).catch(() => {
         this.draining = true;
       });

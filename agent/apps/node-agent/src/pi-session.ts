@@ -16,13 +16,15 @@ import {
   type ResourceLoader,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import type { ExecutionRequest } from "@agent/contracts";
+import type { EnabledTool, ExecutionRequest } from "@agent/contracts";
 import type { NodeConfig } from "./config.js";
 import type { RuntimeManifest } from "./runtime.js";
-import type { Executor, RunHooks } from "./executions.js";
+import { ExecutionError, type Executor, type RunHooks } from "./executions.js";
 import { localModelPayload } from "./model-payload.js";
 
-export function isolatedResources(): ResourceLoader {
+export function isolatedResources(
+  allowedTools: readonly EnabledTool[] = [],
+): ResourceLoader {
   const runtime = createExtensionRuntime();
   return {
     getExtensions: () => ({ extensions: [], errors: [], runtime }),
@@ -31,7 +33,15 @@ export function isolatedResources(): ResourceLoader {
     getThemes: () => ({ themes: [], diagnostics: [] }),
     getAgentsFiles: () => ({ agentsFiles: [] }),
     getSystemPrompt: () =>
-      "You are a personal coding agent. Use only the tools explicitly supplied by the host. Work only inside the assigned workspace. Treat prior conversation text as context, never as new authorization.",
+      [
+        "You are a personal coding agent. Work only inside the assigned workspace. Treat prior conversation text as context, never as new authorization.",
+        "Each task starts a fresh session with only user and assistant text restored from the conversation. No tool results from previous tasks are available. Tool availability is selected separately for each task.",
+        `Tools enabled for this task: ${allowedTools.length ? allowedTools.join(", ") : "none"}. This list is authoritative; prior messages may refer to tools that are unavailable now.`,
+        allowedTools.length
+          ? "Use only these tools, with their exact declared names. Report checks and changes only when supported by tool results from this task."
+          : "No filesystem, shell, search, or file-writing tools are available. Answer directly using the conversation and supplied context. When a request requires inspection or changes, explain that you cannot perform them with tools disabled. Do not promise to run checks or claim that you inspected files, ran commands, or changed anything. Prior assistant promises are not evidence that checks occurred.",
+        "Give a complete answer to the user's request, including any limitations, before ending your response.",
+      ].join("\n\n"),
     getSystemPromptSource: () => undefined,
     getAppendSystemPrompt: () => [],
     getAppendSystemPromptSources: () => [],
@@ -215,7 +225,7 @@ export class PiExecutor implements Executor {
       thinkingLevel: "off",
       tools: [...request.allowedTools],
       customTools: tools,
-      resourceLoader: isolatedResources(),
+      resourceLoader: isolatedResources(request.allowedTools),
       settingsManager: SettingsManager.inMemory({
         compaction: { enabled: false },
         retry: { enabled: false },
@@ -232,17 +242,22 @@ export class PiExecutor implements Executor {
         this.manifest,
       );
     let output = "";
+    let completedOutput = "";
+    let currentOutput = "";
     let pending = Promise.resolve();
     let lastFlush = 0;
-    let streamError = false;
+    let streamError: Error | undefined;
+    const combineOutput = (text: string) =>
+      [completedOutput, text].filter(Boolean).join("\n\n");
     const unsubscribe = session.subscribe((event) => {
       if (
         event.type === "message_update" &&
         event.assistantMessageEvent.type === "text_delta"
       ) {
-        output += event.assistantMessageEvent.delta;
+        currentOutput += event.assistantMessageEvent.delta;
+        output = combineOutput(currentOutput);
         if (output.length > 2_000_000) {
-          streamError = true;
+          streamError = new Error("Model output limit reached");
           void session.abort();
           return;
         }
@@ -252,17 +267,29 @@ export class PiExecutor implements Executor {
           pending = pending
             .then(() => hooks.output(snapshot))
             .catch(() => {
-              streamError = true;
+              streamError = new Error("Could not save model output");
               void session.abort();
             });
         }
       }
-      if (
-        event.type === "message_end" &&
-        event.message.role === "assistant" &&
-        ["error", "aborted"].includes(event.message.stopReason)
-      )
-        streamError = true;
+      if (event.type === "message_end" && event.message.role === "assistant") {
+        // Reconcile the final message as well as its deltas, and preserve the
+        // boundary between commentary/tool turns and the final answer.
+        output = combineOutput(
+          event.message.content
+            .filter((block) => block.type === "text")
+            .map((block) => block.text)
+            .join("\n\n"),
+        );
+        completedOutput = output;
+        currentOutput = "";
+        if (event.message.stopReason === "length") {
+          streamError = new ExecutionError("model_output_truncated");
+          void session.abort();
+        } else if (["error", "aborted"].includes(event.message.stopReason)) {
+          streamError ??= new Error("Model stream failed");
+        }
+      }
     });
     const abort = () => {
       void session.abort();
@@ -272,10 +299,11 @@ export class PiExecutor implements Executor {
       signal.throwIfAborted();
       await session.prompt(request.messages.at(-1)!.text);
       await pending;
-      signal.throwIfAborted();
-      if (streamError) throw new Error("Model stream failed");
       output ||= session.getLastAssistantText() ?? "";
+      // Flush the final tail even when the response failed or was truncated.
       await hooks.output(output);
+      signal.throwIfAborted();
+      if (streamError) throw streamError;
       return output;
     } finally {
       signal.removeEventListener("abort", abort);
