@@ -20,6 +20,8 @@ The authenticated `GET /v1/conversations` endpoint returns conversation summarie
 
 ## Durability and recovery
 
+Each node keeps a stable UUID in `NODE_STATE_DIR/identity.json`; preserve that directory across restarts and moves. An enrolled endpoint has one current identity. A different UUID can replace it after its lease expires, and registration serializes competing claims. The previous identity is marked superseded, excluded from the fleet and routing, and cannot renew a lease or register again. Its database row and execution history remain intact. Startup migrations also reconcile older duplicate endpoint records, keeping the most recently seen identity. Display names are not unique identifiers: equal names at different endpoints remain separate nodes.
+
 A transaction writes the user message, routing reason/evidence, task, attempt and outbox before dispatch. The task request key is unique within its conversation. An identical key with different input returns conflict. Dispatch records send intent, then contacts only an allowlisted endpoint without following redirects.
 
 The dispatcher polls durable node snapshots. It may replay the **same attempt ID and digest** after a 404 only while the original boot and lease generation remain current. It never creates another attempt automatically. Uncertain outcomes remain `unknown`, keep the conversation locked and continue reconciliation. There is no operator resolution API yet: investigate the node journal before changing unresolved state. Cancellation is a request, not rollback of a tool side effect.

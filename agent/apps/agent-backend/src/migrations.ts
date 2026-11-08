@@ -38,4 +38,19 @@ CREATE INDEX IF NOT EXISTS events_conversation_cursor ON execution_events(conver
 CREATE INDEX IF NOT EXISTS nodes_lease ON nodes(lease_expires);
 CREATE INDEX IF NOT EXISTS pending_outbox ON dispatch_outbox(created_at) WHERE NOT completed;
 INSERT INTO schema_migrations(version) VALUES (1) ON CONFLICT DO NOTHING;
+
+ALTER TABLE nodes ADD COLUMN IF NOT EXISTS superseded_by uuid REFERENCES nodes(id);
+CREATE INDEX IF NOT EXISTS nodes_current_endpoint ON nodes ((registration->>'endpoint')) WHERE superseded_by IS NULL;
+
+-- Keep the most recently seen identity at each endpoint. Retain every old row:
+-- execution attempts and routing audit records still refer to its original UUID.
+WITH owners AS (
+ SELECT DISTINCT ON (registration->>'endpoint') id, registration->>'endpoint' AS endpoint
+ FROM nodes WHERE superseded_by IS NULL
+ ORDER BY registration->>'endpoint', last_seen DESC, id
+)
+UPDATE nodes n SET superseded_by=o.id, lease_expires=LEAST(n.lease_expires, now()), draining=true
+FROM owners o
+WHERE n.superseded_by IS NULL AND n.registration->>'endpoint'=o.endpoint AND n.id<>o.id;
+INSERT INTO schema_migrations(version) VALUES (2) ON CONFLICT DO NOTHING;
 `;

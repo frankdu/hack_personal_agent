@@ -73,6 +73,7 @@ export class Store {
   async migrate(): Promise<void> {
     await this.transaction(async (db) => {
       await db.query("SELECT pg_advisory_xact_lock(87003100)");
+      await db.query("SELECT pg_advisory_xact_lock(87003101)");
       await db.query(migration);
     });
   }
@@ -106,16 +107,33 @@ export class Store {
         "Node endpoint is not enrolled in NODE_ENDPOINT_ALLOWLIST.",
       );
     return this.transaction(async (db) => {
-      // Serialize even first-time concurrent enrollment of the same stable identity.
-      await db.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
-        input.nodeId,
-      ]);
+      // Registration is infrequent. Serialize identity/endpoint ownership changes,
+      // including first enrollments and moves between endpoints, in one lock order.
+      await db.query("SELECT pg_advisory_xact_lock(87003101)");
       const current = (
         await db.query("SELECT * FROM nodes WHERE id=$1 FOR UPDATE", [
           input.nodeId,
         ])
       ).rows[0];
+      if (current?.superseded_by)
+        throw new ApiError(
+          409,
+          "SUPERSEDED_NODE",
+          "This node identity has been replaced. Use the current node's state directory.",
+        );
+      const owners = (
+        await db.query(
+          "SELECT * FROM nodes WHERE superseded_by IS NULL AND registration->>'endpoint'=$1 AND id<>$2 FOR UPDATE",
+          [endpoint, input.nodeId],
+        )
+      ).rows;
       const now = new Date();
+      if (owners.some((owner) => owner.lease_expires.getTime() > now.getTime()))
+        throw new ApiError(
+          409,
+          "ENDPOINT_IN_USE",
+          "Another node identity holds this endpoint. Stop it and wait for its lease to expire before enrolling a replacement.",
+        );
       const expiresAt = new Date(
         now.getTime() + this.config.leaseMs,
       ).toISOString();
@@ -145,6 +163,10 @@ export class Store {
           expiresAt,
         ],
       );
+      await db.query(
+        "UPDATE nodes SET superseded_by=$1,lease_expires=LEAST(lease_expires,$3),draining=true WHERE id=ANY($2::uuid[])",
+        [input.nodeId, owners.map((owner) => owner.id), now],
+      );
       return {
         nodeId: input.nodeId,
         bootId: input.bootId,
@@ -161,6 +183,7 @@ export class Store {
       ).rows[0];
       if (!current) throw missing();
       if (
+        current.superseded_by ||
         current.boot_id !== input.bootId ||
         current.generation !== input.generation
       )
@@ -208,7 +231,7 @@ export class Store {
   ): Promise<Array<{ node: FleetNode; reserved: number }>> {
     const result =
       await db.query(`SELECT n.*, (SELECT count(*) FROM execution_attempts a JOIN tasks t ON t.id=a.task_id
-      WHERE a.node_id=n.id AND t.body->>'status' IN ('queued','running','unknown')) AS reserved FROM nodes n ORDER BY n.id`);
+      WHERE a.node_id=n.id AND t.body->>'status' IN ('queued','running','unknown')) AS reserved FROM nodes n WHERE n.superseded_by IS NULL ORDER BY n.id`);
     return result.rows.map((row) => {
       const { endpoint: _, ...registration } = row.registration as Registration;
       const node = fleetNodeSchema.parse({
@@ -236,7 +259,7 @@ export class Store {
       const row = (
         await db.query("SELECT * FROM nodes WHERE id=$1 FOR UPDATE", [nodeId])
       ).rows[0];
-      if (!row) throw missing();
+      if (!row || row.superseded_by) throw missing();
       const current = (await this.nodes(db)).find(
         (n) => n.node.nodeId === nodeId,
       )!;
@@ -624,7 +647,7 @@ export class Store {
   async currentLease(request: ExecutionRequest): Promise<boolean> {
     const row = (
       await this.pool.query(
-        "SELECT 1 FROM nodes WHERE id=$1 AND boot_id=$2 AND generation=$3 AND lease_expires>now() AND NOT draining",
+        "SELECT 1 FROM nodes WHERE id=$1 AND boot_id=$2 AND generation=$3 AND lease_expires>now() AND NOT draining AND superseded_by IS NULL",
         [request.nodeId, request.bootId, request.generation],
       )
     ).rows[0];

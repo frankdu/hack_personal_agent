@@ -76,7 +76,8 @@ describe(
           DATABASE_URL: url.toString(),
           API_TOKEN: "integration-user-token-long",
           NODE_SHARED_TOKEN: "integration-node-token-long",
-          NODE_ENDPOINT_ALLOWLIST: "http://127.0.0.1:32001",
+          NODE_ENDPOINT_ALLOWLIST:
+            "http://127.0.0.1:32001,http://127.0.0.1:32002,http://127.0.0.1:32003",
         }),
         port: 0,
       };
@@ -280,6 +281,112 @@ describe(
         );
       }
       assert.deepEqual(await list(), []);
+    });
+    test("endpoint replacement retires stale identities and serializes competing enrollments", async () => {
+      const old = {
+        ...registration,
+        nodeId: randomUUID(),
+        bootId: randomUUID(),
+        endpoint: "http://127.0.0.1:32002",
+      };
+      const replacements = [0, 1].map(() => ({
+        ...old,
+        nodeId: randomUUID(),
+        bootId: randomUUID(),
+      }));
+      const ids = [old, ...replacements].map((node) => node.nodeId);
+      try {
+        const oldLease = await app.store.register(old);
+        // Equal display names at different endpoints remain separate machines.
+        assert.equal((await app.store.nodes()).length, 2);
+        await assert.rejects(
+          app.store.register(replacements[0]!),
+          /holds this endpoint/,
+        );
+        await app.store.pool.query(
+          "UPDATE nodes SET lease_expires=now()-interval '1 second' WHERE id=$1",
+          [old.nodeId],
+        );
+        const results = await Promise.allSettled(
+          replacements.map((node) => app.store.register(node)),
+        );
+        assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
+        const winner = results.find((r) => r.status === "fulfilled")!;
+        assert.equal(winner.status, "fulfilled");
+        const fleet = (await app.store.nodes()).map((n) => n.node.nodeId);
+        assert(fleet.includes(winner.value.nodeId));
+        assert(!fleet.includes(old.nodeId));
+        const retired = (
+          await app.store.pool.query("SELECT * FROM nodes WHERE id=$1", [
+            old.nodeId,
+          ])
+        ).rows[0];
+        assert.equal(retired.superseded_by, winner.value.nodeId);
+        assert.equal(retired.registration.nodeId, old.nodeId);
+        await assert.rejects(app.store.register(old), /has been replaced/);
+        await assert.rejects(
+          app.store.heartbeat(old.nodeId, {
+            protocolVersion: "1",
+            bootId: old.bootId,
+            generation: oldLease.generation,
+            sequence: 100,
+            draining: false,
+            activeAttempts: [],
+            profiles: old.profiles,
+            availableMemoryBytes: 1000,
+          }),
+          /no longer current/,
+        );
+        await assert.rejects(
+          app.store.selectModel(old.nodeId, "gemma"),
+          /not found/i,
+        );
+      } finally {
+        await app.store.pool.query(
+          "DELETE FROM nodes WHERE id=ANY($1::uuid[])",
+          [ids],
+        );
+      }
+    });
+    test("migration reconciles legacy endpoint duplicates and retains their historical rows", async () => {
+      const ids = [randomUUID(), randomUUID()];
+      try {
+        for (const [index, id] of ids.entries()) {
+          await app.store.pool.query(
+            `INSERT INTO nodes(id,boot_id,generation,registration,last_seen,lease_expires)
+             VALUES($1,$2,$3,$4,now()-($5 * interval '1 minute'),now()-interval '1 second')`,
+            [
+              id,
+              randomUUID(),
+              randomUUID(),
+              JSON.stringify({
+                ...registration,
+                nodeId: id,
+                endpoint: "http://127.0.0.1:32002",
+              }),
+              index + 1,
+            ],
+          );
+        }
+        await app.store.migrate();
+        await app.store.migrate();
+        const fleet = (await app.store.nodes()).map((n) => n.node.nodeId);
+        assert(fleet.includes(ids[0]!));
+        assert(!fleet.includes(ids[1]!));
+        const rows = (
+          await app.store.pool.query(
+            "SELECT id,superseded_by FROM nodes WHERE id=ANY($1::uuid[])",
+            [ids],
+          )
+        ).rows;
+        assert.equal(rows.length, 2);
+        assert.equal(rows.find((r) => r.id === ids[1])?.superseded_by, ids[0]);
+      } finally {
+        await app.store.pool.query(
+          "DELETE FROM nodes WHERE id=ANY($1::uuid[])",
+          [ids],
+        );
+      }
     });
     test("registration allowlist, boot fencing and heartbeat order", async () => {
       await assert.rejects(
@@ -491,6 +598,7 @@ describe(
         nodeId: randomUUID(),
         bootId: randomUUID(),
         name: "matching-model-node",
+        endpoint: "http://127.0.0.1:32003",
         profiles: [
           {
             ...registration.profiles[0]!,

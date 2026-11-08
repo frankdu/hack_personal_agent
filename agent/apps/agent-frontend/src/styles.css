@@ -72,11 +72,14 @@ textarea:focus-visible {
   outline-offset: 4px;
 }
 .workspace-shell {
-  min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
   display: grid;
   grid-template-columns: 224px minmax(0, 1fr) 282px;
 }
 .sidebar {
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   padding: 28px 18px 20px;
@@ -191,10 +194,12 @@ textarea:focus-visible {
 }
 .main-content {
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
 .topbar {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -226,12 +231,22 @@ textarea:focus-visible {
 }
 .conversation-area {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   width: min(100%, 790px);
   margin: 0 auto;
-  padding: 65px 48px 26px;
+  padding: 28px 48px 26px;
+}
+.conversation-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.conversation-scroll > .welcome {
+  padding-top: 37px;
 }
 .welcome {
   padding-top: 15px;
@@ -292,7 +307,10 @@ h1 {
   color: #7f9273;
 }
 .composer-area {
-  margin-top: 80px;
+  flex-shrink: 0;
+  max-height: calc(100% - 23px);
+  overflow-y: auto;
+  margin-top: 20px;
 }
 .composer {
   padding: 15px;
@@ -307,7 +325,7 @@ h1 {
   width: 100%;
   resize: vertical;
   min-height: 77px;
-  max-height: 250px;
+  max-height: min(250px, 20dvh);
   padding: 3px 2px;
   background: transparent;
   border: none;
@@ -353,11 +371,22 @@ h1 {
   line-height: 1.6;
 }
 .fleet-panel {
+  min-height: 0;
+  overflow-y: auto;
   border-left: 1px solid var(--border);
   background: #f8f9f4;
   padding: 30px 23px 25px;
   display: flex;
   flex-direction: column;
+}
+.fleet-toggle {
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.fleet-close.icon-refresh,
+.fleet-backdrop {
+  display: none;
 }
 .fleet-heading {
   display: flex;
@@ -459,19 +488,32 @@ h1 {
     grid-template-columns: 190px minmax(0, 1fr);
   }
   .fleet-panel {
-    grid-column: 2;
-    border-left: none;
-    border-top: 1px solid var(--border);
+    display: none;
+    position: fixed;
+    inset: 0 0 0 auto;
+    width: min(360px, 100%);
+    z-index: 21;
     padding: 25px 32px;
   }
-  .sidebar {
-    grid-row: 1 / 3;
+  .fleet-open .fleet-panel {
+    display: flex;
+  }
+  .fleet-open .fleet-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    background: #1d342840;
+    border: 0;
+  }
+  .fleet-close.icon-refresh {
+    display: grid;
   }
   .conversation-area {
-    padding: 50px 32px 30px;
+    padding: 20px 32px;
   }
   .composer-area {
-    margin-top: 50px;
+    margin-top: 20px;
   }
   .empty-fleet {
     margin-top: 18px;
@@ -489,9 +531,11 @@ h1 {
 }
 @media (max-width: 640px) {
   .workspace-shell {
-    display: block;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
   }
   .sidebar {
+    max-height: 25dvh;
     padding: 16px 20px;
     border-right: none;
     border-bottom: 1px solid var(--border);
@@ -512,7 +556,7 @@ h1 {
     flex-wrap: wrap;
   }
   .conversation-area {
-    padding: 35px 23px 25px;
+    padding: 16px 23px;
   }
   .welcome {
     padding-top: 0;
@@ -531,7 +575,7 @@ h1 {
     margin-left: auto;
   }
   .composer-area {
-    margin-top: 38px;
+    margin-top: 16px;
   }
   .fleet-panel {
     padding: 25px 23px;
@@ -726,6 +770,7 @@ h1 {
   text-decoration: underline;
 }
 .conversation-reference {
+  flex-shrink: 0;
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
@@ -743,18 +788,15 @@ h1 {
   color: #a1aa95;
 }
 .conversation-area.has-conversation {
-  padding-top: 28px;
-  justify-content: flex-end;
+  padding-top: 20px;
 }
 .has-conversation .composer-area {
   margin-top: 23px;
 }
 .message-list {
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 24px;
-  min-height: 200px;
 }
 .chat-message {
   padding: 17px 18px;
@@ -863,6 +905,8 @@ h1 {
   color: #96a283;
 }
 .task-options {
+  max-height: 24dvh;
+  overflow-y: auto;
   border-top: 1px solid #f0f1ea;
   margin-top: 12px;
   padding-top: 11px;
@@ -1023,6 +1067,11 @@ h1 {
     padding: 7px;
     font-size: 10px;
     margin-left: auto;
+  }
+  .sidebar .fleet-toggle {
+    display: flex;
+    padding: 7px;
+    font-size: 10px;
   }
   .sidebar .connection-control + .connection-control {
     margin-left: 0;

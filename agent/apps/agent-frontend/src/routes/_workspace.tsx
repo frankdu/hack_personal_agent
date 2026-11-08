@@ -42,6 +42,7 @@ import {
   Square,
   Terminal,
   Unplug,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConversationList } from "@/components/conversation-list";
@@ -224,6 +225,7 @@ function ChatWorkspace({
   const { conversationId: routeConversationId } = useParams({ strict: false });
   const conversationId = routeConversationId ?? null;
   const [draft, setDraft] = useState("");
+  const [fleetOpen, setFleetOpen] = useState(false);
   const [routing, setRouting] = useState("auto");
   const [modelId, setModelId] = useState("");
   const [workspaceId, setWorkspaceId] = useState("default");
@@ -242,7 +244,7 @@ function ChatWorkspace({
   const live = useRef(true);
   const submitLock = useRef(false);
   const actionAbort = useRef<AbortController | null>(null);
-  const messageEnd = useRef<HTMLDivElement | null>(null);
+  const conversationScroll = useRef<HTMLDivElement | null>(null);
   const displayedConversationId = useRef(conversationId);
   useEffect(() => {
     if (displayedConversationId.current === conversationId) return;
@@ -364,7 +366,8 @@ function ChatWorkspace({
     if (conversation?.activeTaskId) setLastTaskId(conversation.activeTaskId);
   }, [conversation?.activeTaskId]);
   useEffect(() => {
-    messageEnd.current?.scrollIntoView({ block: "nearest" });
+    const pane = conversationScroll.current;
+    if (pane) pane.scrollTop = pane.scrollHeight;
   }, [output, conversation?.messages.length]);
 
   async function performSubmit(existing?: PendingSubmission) {
@@ -583,7 +586,7 @@ function ChatWorkspace({
     !!conversationQuery.error;
 
   return (
-    <div className="workspace-shell">
+    <div className={`workspace-shell ${fleetOpen ? "fleet-open" : ""}`}>
       <aside className="sidebar" aria-label="Workspace navigation">
         <Link className="brand" to="/" aria-label="Curilo Agent home">
           <span className="brand-mark">
@@ -606,10 +609,15 @@ function ChatWorkspace({
           <Plus /> New conversation
         </Button>
         <div className="sidebar-label">WORKSPACE</div>
-        <a className="nav-item" href="#connected-nodes">
+        <button
+          className="nav-item fleet-toggle"
+          aria-expanded={fleetOpen}
+          aria-controls="connected-nodes"
+          onClick={() => setFleetOpen((open) => !open)}
+        >
           <Network size={16} /> Connected nodes
           <span className="count">{onlineNodes.length}</span>
-        </a>
+        </button>
         <button className="nav-item connection-control" onClick={onSettings}>
           <Settings2 size={16} /> Connection settings
         </button>
@@ -673,132 +681,142 @@ function ChatWorkspace({
         <div
           className={`conversation-area ${conversationId ? "has-conversation" : ""}`}
         >
-          {!conversationId ? (
-            <section className="welcome" aria-labelledby="welcome-heading">
-              <div className="eyebrow">
-                <span /> ONE AGENT. YOUR MACHINES.
-              </div>
-              <h1 id="welcome-heading">
-                What would you
-                <br />
-                like to build?
-              </h1>
-              <p>
-                Your agent finds the right machine for the job.
-                <br className="desktop-break" /> Keep the conversation here,
-                wherever the work runs.
-              </p>
-              <div className="suggestions">
-                {suggestions.map((suggestion, index) => (
-                  <button key={suggestion} onClick={() => setDraft(suggestion)}>
-                    <span className="suggestion-icon">
-                      {index === 0 ? (
-                        <Terminal size={18} />
-                      ) : index === 1 ? (
-                        <Cpu size={18} />
-                      ) : (
-                        <Sparkles size={18} />
-                      )}
-                    </span>
-                    {suggestion}
-                    <ArrowUpRight size={15} />
-                  </button>
-                ))}
-              </div>
-            </section>
-          ) : (
-            <section
-              className="message-list"
-              aria-label="Conversation messages"
-              aria-busy={conversationQuery.isPending}
-            >
-              {conversationQuery.isPending && (
-                <p className="muted-note">Loading conversation…</p>
-              )}
-              {conversation?.messages.map((message) => (
-                <ChatMessage
-                  key={message.id}
-                  role={message.role}
-                  text={message.text}
-                  onDelete={() => deleteMessage(message.id)}
-                  deleteDisabledReason={
-                    active || submitting || pending
-                      ? "Wait for the current task or submission to finish before deleting."
-                      : deletingMessage
-                        ? "Deleting a message…"
-                        : undefined
-                  }
-                />
-              ))}
-              {task &&
-                output !== null &&
-                (output || isTaskActive(task.status)) && (
-                  <ChatMessage
-                    key={task.id}
-                    role="assistant"
-                    text={output || "Waiting for the model…"}
-                    status={task.status}
-                    deleteDisabledReason="Wait for this message to finish and be saved before deleting."
-                  />
-                )}
-              {task?.error && (
-                <p className="error-banner" role="alert">
-                  {task.error}
+          <div
+            className="conversation-scroll"
+            ref={conversationScroll}
+            tabIndex={0}
+            role="region"
+            aria-label="Conversation content"
+          >
+            {!conversationId ? (
+              <section className="welcome" aria-labelledby="welcome-heading">
+                <div className="eyebrow">
+                  <span /> ONE AGENT. YOUR MACHINES.
+                </div>
+                <h1 id="welcome-heading">
+                  What would you
+                  <br />
+                  like to build?
+                </h1>
+                <p>
+                  Your agent finds the right machine for the job.
+                  <br className="desktop-break" /> Keep the conversation here,
+                  wherever the work runs.
                 </p>
-              )}
-              {task?.status === "unknown" && (
-                <p className="error-banner">
-                  Execution outcome is unknown. The task is not automatically
-                  replayed; inspect the node before repeating any tool action.
-                </p>
-              )}
-              {task?.status === "cancelled" && (
-                <p className="muted-note">
-                  Task cancelled. Tool actions completed before cancellation may
-                  remain.
-                </p>
-              )}
-              <div ref={messageEnd} />
-            </section>
-          )}
-          {(conversationQuery.error || taskQuery.error) && (
-            <p className="error-banner" role="alert">
-              {errorText(conversationQuery.error ?? taskQuery.error)}{" "}
-              <button
-                onClick={() => {
-                  void conversationQuery.refetch();
-                  if (taskId) void taskQuery.refetch();
-                }}
+                <div className="suggestions">
+                  {suggestions.map((suggestion, index) => (
+                    <button
+                      key={suggestion}
+                      onClick={() => setDraft(suggestion)}
+                    >
+                      <span className="suggestion-icon">
+                        {index === 0 ? (
+                          <Terminal size={18} />
+                        ) : index === 1 ? (
+                          <Cpu size={18} />
+                        ) : (
+                          <Sparkles size={18} />
+                        )}
+                      </span>
+                      {suggestion}
+                      <ArrowUpRight size={15} />
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ) : (
+              <section
+                className="message-list"
+                aria-label="Conversation messages"
+                aria-busy={conversationQuery.isPending}
               >
-                Refresh status
-              </button>
-            </p>
-          )}
-          {latestDecision && (
-            <section className="decision-strip" aria-label="Routing decision">
-              <Sparkles size={15} />
-              <div>
-                <strong>
-                  {nodes.find((node) => node.nodeId === latestDecision.nodeId)
-                    ?.name ?? latestDecision.nodeId}{" "}
-                  · {latestDecision.profileId}
-                </strong>
-                <p>{latestDecision.reason}</p>
-                <small>
-                  {latestDecision.provider === "jev"
-                    ? "Jev judgment"
-                    : "Rules fallback"}{" "}
-                  · {Math.round(latestDecision.latencyMs)} ms routing ·{" "}
-                  {task?.status}
-                </small>
-              </div>
-            </section>
-          )}
-          {decisionsQuery.error && (
-            <p className="muted-note">
-              Decision history unavailable: {errorText(decisionsQuery.error)}
-            </p>
-          )}
+                {conversationQuery.isPending && (
+                  <p className="muted-note">Loading conversation…</p>
+                )}
+                {conversation?.messages.map((message) => (
+                  <ChatMessage
+                    key={message.id}
+                    role={message.role}
+                    text={message.text}
+                    onDelete={() => deleteMessage(message.id)}
+                    deleteDisabledReason={
+                      active || submitting || pending
+                        ? "Wait for the current task or submission to finish before deleting."
+                        : deletingMessage
+                          ? "Deleting a message…"
+                          : undefined
+                    }
+                  />
+                ))}
+                {task &&
+                  output !== null &&
+                  (output || isTaskActive(task.status)) && (
+                    <ChatMessage
+                      key={task.id}
+                      role="assistant"
+                      text={output || "Waiting for the model…"}
+                      status={task.status}
+                      deleteDisabledReason="Wait for this message to finish and be saved before deleting."
+                    />
+                  )}
+                {task?.error && (
+                  <p className="error-banner" role="alert">
+                    {task.error}
+                  </p>
+                )}
+                {task?.status === "unknown" && (
+                  <p className="error-banner">
+                    Execution outcome is unknown. The task is not automatically
+                    replayed; inspect the node before repeating any tool action.
+                  </p>
+                )}
+                {task?.status === "cancelled" && (
+                  <p className="muted-note">
+                    Task cancelled. Tool actions completed before cancellation
+                    may remain.
+                  </p>
+                )}
+              </section>
+            )}
+            {(conversationQuery.error || taskQuery.error) && (
+              <p className="error-banner" role="alert">
+                {errorText(conversationQuery.error ?? taskQuery.error)}{" "}
+                <button
+                  onClick={() => {
+                    void conversationQuery.refetch();
+                    if (taskId) void taskQuery.refetch();
+                  }}
+                >
+                  Refresh status
+                </button>
+              </p>
+            )}
+            {latestDecision && (
+              <section className="decision-strip" aria-label="Routing decision">
+                <Sparkles size={15} />
+                <div>
+                  <strong>
+                    {nodes.find((node) => node.nodeId === latestDecision.nodeId)
+                      ?.name ?? latestDecision.nodeId}{" "}
+                    · {latestDecision.profileId}
+                  </strong>
+                  <p>{latestDecision.reason}</p>
+                  <small>
+                    {latestDecision.provider === "jev"
+                      ? "Jev judgment"
+                      : "Rules fallback"}{" "}
+                    · {Math.round(latestDecision.latencyMs)} ms routing ·{" "}
+                    {task?.status}
+                  </small>
+                </div>
+              </section>
+            )}
+            {decisionsQuery.error && (
+              <p className="muted-note">
+                Decision history unavailable: {errorText(decisionsQuery.error)}
+              </p>
+            )}
+          </div>
           <section className="composer-area" aria-label="Message composer">
             <form
               className="composer"
@@ -997,10 +1015,20 @@ function ChatWorkspace({
           </section>
         </div>
       </main>
+      {fleetOpen && (
+        <button
+          className="fleet-backdrop"
+          aria-label="Close connected nodes"
+          onClick={() => setFleetOpen(false)}
+        />
+      )}
       <aside
         id="connected-nodes"
         className="fleet-panel"
         aria-labelledby="fleet-heading"
+        onKeyDown={(event) => {
+          if (event.key === "Escape") setFleetOpen(false);
+        }}
       >
         <div className="fleet-heading">
           <h2 id="fleet-heading">Your nodes</h2>
@@ -1016,6 +1044,13 @@ function ChatWorkspace({
               <RefreshCw size={13} />
             </button>
           )}
+          <button
+            className="fleet-close icon-refresh"
+            aria-label="Close connected nodes"
+            onClick={() => setFleetOpen(false)}
+          >
+            <X size={16} />
+          </button>
         </div>
         <p className="fleet-description">The machines behind your agent.</p>
         {nodesQuery.error && (
