@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConversationList } from "@/components/conversation-list";
+import { ChatMessage } from "@/components/chat-message";
 import {
   apiRequest,
   errorText,
@@ -231,6 +232,8 @@ function ChatWorkspace({
   const [lastTaskId, setLastTaskId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [deletingMessage, setDeletingMessage] = useState(false);
+  const deleteLock = useRef(false);
   const [pending, setPending] = useState<PendingSubmission | null>(null);
   const [actionError, setActionError] = useState("");
   const live = useRef(true);
@@ -362,7 +365,7 @@ function ChatWorkspace({
   }, [output, conversation?.messages.length]);
 
   async function performSubmit(existing?: PendingSubmission) {
-    if (!connection || submitLock.current) return;
+    if (!connection || submitLock.current || deleteLock.current) return;
     if (!existing && !draft.trim()) return;
     submitLock.current = true;
     setSubmitting(true);
@@ -472,6 +475,51 @@ function ChatWorkspace({
     }
   }
 
+  async function deleteMessage(messageId: string) {
+    if (
+      !connection ||
+      !conversation ||
+      deleteLock.current ||
+      submitLock.current ||
+      active ||
+      pending
+    )
+      return;
+    deleteLock.current = true;
+    setDeletingMessage(true);
+    const id = conversation.id;
+    try {
+      // Cancel older polling snapshots before replacing the cached history.
+      await queryClient.cancelQueries({
+        queryKey: [...prefix, "conversation", id],
+      });
+      const updated = await apiRequest(
+        connection,
+        `/v1/conversations/${id}/messages/${messageId}`,
+        conversationSchema,
+        { method: "DELETE", body: { expectedRevision: conversation.revision } },
+      );
+      if (!live.current) return;
+      await queryClient.cancelQueries({
+        queryKey: [...prefix, "conversation", id],
+      });
+      queryClient.setQueryData([...prefix, "conversation", id], updated);
+    } catch (error) {
+      throw new Error(errorText(error));
+    } finally {
+      deleteLock.current = false;
+      if (live.current) {
+        setDeletingMessage(false);
+        void queryClient.invalidateQueries({
+          queryKey: [...prefix, "conversation", id],
+        });
+        void queryClient.invalidateQueries({
+          queryKey: [...prefix, "conversations"],
+        });
+      }
+    }
+  }
+
   async function cancelTask() {
     if (!connection || !taskId || cancelling) return;
     setCancelling(true);
@@ -522,6 +570,7 @@ function ChatWorkspace({
     !draft.trim() ||
     active ||
     submitting ||
+    deletingMessage ||
     !!pending ||
     !!nodesQuery.error ||
     nodesQuery.isPending ||
@@ -664,27 +713,30 @@ function ChatWorkspace({
                 <p className="muted-note">Loading conversation…</p>
               )}
               {conversation?.messages.map((message) => (
-                <article
-                  className={`chat-message ${message.role}`}
+                <ChatMessage
                   key={message.id}
-                >
-                  <div className="message-role">
-                    {message.role === "user" ? "You" : "Curilo Agent"}
-                  </div>
-                  <div className="message-text">{message.text}</div>
-                </article>
+                  role={message.role}
+                  text={message.text}
+                  onDelete={() => deleteMessage(message.id)}
+                  deleteDisabledReason={
+                    active || submitting || pending
+                      ? "Wait for the current task or submission to finish before deleting."
+                      : deletingMessage
+                        ? "Deleting a message…"
+                        : undefined
+                  }
+                />
               ))}
               {task &&
                 output !== null &&
                 (output || isTaskActive(task.status)) && (
-                  <article className="chat-message assistant">
-                    <div className="message-role">
-                      Curilo Agent <span>{task.status}</span>
-                    </div>
-                    <div className="message-text">
-                      {output || "Waiting for the model…"}
-                    </div>
-                  </article>
+                  <ChatMessage
+                    key={task.id}
+                    role="assistant"
+                    text={output || "Waiting for the model…"}
+                    status={task.status}
+                    deleteDisabledReason="Wait for this message to finish and be saved before deleting."
+                  />
                 )}
               {task?.error && (
                 <p className="error-banner" role="alert">

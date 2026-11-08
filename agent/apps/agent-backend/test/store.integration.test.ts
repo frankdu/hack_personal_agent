@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import {
   conversationsResponseSchema,
+  conversationSchema,
   registrationSchema,
   submitMessageSchema,
 } from "@agent/contracts";
@@ -130,6 +131,78 @@ describe(
         "http://localhost:3000",
       );
     });
+    test("message deletion persists, checks revisions and refuses active conversations", async () => {
+      const branch = await app.store.createConversation();
+      const messages = ["user", "assistant"].map((role) => ({
+        id: randomUUID(),
+        role,
+        text: `${role} message`,
+        taskId: null,
+        createdAt: new Date().toISOString(),
+      }));
+      await app.store.pool.query(
+        "UPDATE conversations SET body=$2 WHERE id=$1",
+        [branch.id, JSON.stringify({ ...branch, messages })],
+      );
+      const remove = (
+        messageId: string,
+        expectedRevision: number,
+        token = config.apiToken,
+      ) =>
+        fetch(`${http}/v1/conversations/${branch.id}/messages/${messageId}`, {
+          method: "DELETE",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+            origin: "http://localhost:3000",
+          },
+          body: JSON.stringify({ expectedRevision }),
+        });
+      try {
+        assert.equal(
+          (await remove(messages[0]!.id, 0, config.nodeToken)).status,
+          401,
+        );
+        assert.equal((await remove(messages[0]!.id, -1)).status, 400);
+        assert.equal((await remove(messages[0]!.id, 1)).status, 409);
+        assert.equal((await remove(randomUUID(), 0)).status, 404);
+        const response = await remove(messages[1]!.id, 0);
+        assert.equal(response.status, 200);
+        assert.match(
+          response.headers.get("access-control-allow-methods")!,
+          /DELETE/,
+        );
+        const updated = conversationSchema.parse(await response.json());
+        assert.equal(updated.revision, 1);
+        assert.deepEqual(
+          updated.messages.map((m) => m.id),
+          [messages[0]!.id],
+        );
+        assert.deepEqual(await app.store.conversation(branch.id), updated);
+        assert.equal((await remove(messages[1]!.id, 1)).status, 404);
+        const active = { ...updated, activeTaskId: randomUUID() };
+        await app.store.pool.query(
+          "UPDATE conversations SET body=$2 WHERE id=$1",
+          [branch.id, JSON.stringify(active)],
+        );
+        assert.equal((await remove(messages[0]!.id, 1)).status, 409);
+        assert.deepEqual(await app.store.conversation(branch.id), active);
+        await app.store.pool.query(
+          "UPDATE conversations SET body=$2 WHERE id=$1",
+          [branch.id, JSON.stringify(updated)],
+        );
+        assert.equal((await remove(messages[0]!.id, 1)).status, 200);
+        assert.equal(
+          (await app.store.conversation(branch.id)).messages.length,
+          0,
+        );
+      } finally {
+        await app.store.pool.query("DELETE FROM conversations WHERE id=$1", [
+          branch.id,
+        ]);
+      }
+    });
+
     test("conversation list is authenticated, read-only and ordered by latest message", async () => {
       for (const token of ["", config.nodeToken]) {
         const response = await fetch(`${http}/v1/conversations`, {

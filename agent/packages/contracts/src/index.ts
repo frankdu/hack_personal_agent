@@ -158,6 +158,9 @@ export const submitMessageSchema = z
   })
   .strict();
 export type SubmitMessage = z.infer<typeof submitMessageSchema>;
+export const deleteMessageSchema = z
+  .object({ expectedRevision: z.number().int().nonnegative() })
+  .strict();
 export const messageSchema = z.object({
   id,
   role: z.enum(["user", "assistant"]),

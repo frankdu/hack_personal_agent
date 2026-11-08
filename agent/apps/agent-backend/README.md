@@ -16,6 +16,8 @@ Eligibility checks fresh leases, model readiness, workspace IDs, tool subsets an
 
 The authenticated `GET /v1/conversations` endpoint returns conversation summaries (ID, first-message title, latest-message timestamp and active task ID) ordered by recent activity. It includes conversations created by older clients without messages, using an untitled label. Message histories are loaded separately through `GET /v1/conversations/:id`.
 
+`DELETE /v1/conversations/:id/messages/:messageId` accepts `{ "expectedRevision": number }` and returns the updated conversation. It removes only that message from history and future task context, increments the revision under the conversation row lock, and rejects stale revisions or active/unresolved tasks with 409. Existing task records and execution audit events are retained.
+
 ## Durability and recovery
 
 A transaction writes the user message, routing reason/evidence, task, attempt and outbox before dispatch. The task request key is unique within its conversation. An identical key with different input returns conflict. Dispatch records send intent, then contacts only an allowlisted endpoint without following redirects.

@@ -35,7 +35,7 @@ export async function apiRequest<T>(
   path: string,
   schema: Parser<T>,
   options: {
-    method?: "GET" | "POST";
+    method?: "GET" | "POST" | "DELETE";
     body?: unknown;
     idempotencyKey?: string;
     signal?: AbortSignal;

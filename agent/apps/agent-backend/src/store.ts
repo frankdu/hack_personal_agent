@@ -361,6 +361,35 @@ export class Store {
     if (!row) throw missing();
     return row.body as Conversation;
   }
+  async deleteMessage(
+    conversationId: string,
+    messageId: string,
+    expectedRevision: number,
+  ): Promise<Conversation> {
+    return this.transaction(async (db) => {
+      const conversation = await this.conversation(conversationId, db, true);
+      if (
+        conversation.revision !== expectedRevision ||
+        conversation.activeTaskId
+      )
+        throw new ApiError(
+          409,
+          "CONVERSATION_CONFLICT",
+          "Conversation changed or still has an active or unresolved task. Refresh and try again.",
+        );
+      const index = conversation.messages.findIndex(
+        (message) => message.id === messageId,
+      );
+      if (index === -1) throw missing();
+      conversation.messages.splice(index, 1);
+      conversation.revision++;
+      await db.query("UPDATE conversations SET body=$2 WHERE id=$1", [
+        conversationId,
+        JSON.stringify(conversation),
+      ]);
+      return conversation;
+    });
+  }
   async task(id: string, db: Db = this.pool): Promise<Task> {
     const row = (await db.query("SELECT body FROM tasks WHERE id=$1", [id]))
       .rows[0];

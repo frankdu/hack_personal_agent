@@ -788,6 +788,54 @@ h1 {
   line-height: 1.8;
   color: #4b5843;
 }
+.message-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 10px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+.chat-message:last-of-type .message-actions,
+.chat-message:hover .message-actions,
+.chat-message:focus-within .message-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+.message-actions button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #859079;
+}
+.message-actions button:hover {
+  color: #385f42;
+  background: #e5eadf;
+}
+.message-actions .message-delete:hover {
+  color: #9a4b3b;
+  background: #f5e9e3;
+}
+.message-actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.message-actions svg {
+  width: 13px;
+  height: 13px;
+}
+@media (hover: none) {
+  .message-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
 .decision-strip {
   display: flex;
   gap: 9px;

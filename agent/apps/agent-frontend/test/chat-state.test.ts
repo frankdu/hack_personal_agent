@@ -101,6 +101,28 @@ test("cumulative snapshots replace output and persisted assistant message preven
   });
   assert.equal(pendingAssistantOutput(conversation, task), null);
 });
+test("deleted assistant output stays deleted once the conversation has finished the task", () => {
+  const conversation = conversationSchema.parse({
+    id,
+    revision: 3,
+    activeTaskId: null,
+    messages: [],
+  });
+  for (const status of ["succeeded", "failed", "cancelled"] as const) {
+    assert.equal(
+      pendingAssistantOutput(conversation, { ...task, status }),
+      null,
+    );
+    assert.equal(
+      pendingAssistantOutput(
+        { ...conversation, activeTaskId: id },
+        { ...task, status },
+      ),
+      "Hello",
+    );
+  }
+});
+
 test("manual pin refuses offline, missing, unready, workspace or tool mismatches", () => {
   assert.equal(selectedNodeProblem([node], id, "default", ["read"]), null);
   for (const candidate of [

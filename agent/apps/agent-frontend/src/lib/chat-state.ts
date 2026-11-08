@@ -50,6 +50,9 @@ export function pendingAssistantOutput(
 ): string | null {
   if (
     !task ||
+    (conversation &&
+      conversation.activeTaskId !== task.id &&
+      ["succeeded", "failed", "cancelled"].includes(task.status)) ||
     conversation?.messages.some(
       (message) => message.role === "assistant" && message.taskId === task.id,
     )

@@ -23,6 +23,8 @@ Each inactive Ollama model has an **Activate** power icon beside its status. Cli
 
 Fleet and conversation-list polling run every three seconds, conversation polling every 1.5 seconds, and active task polling every 750 ms. This client currently uses authenticated polling rather than SSE; it replaces cumulative output snapshots and suppresses a temporary assistant output once the persisted message arrives. TanStack Query caches are isolated by connection and cleared on disconnect. No fake nodes or responses are supplied.
 
+Each message has compact Copy, Delete, Like and Dislike icon buttons. The last message's actions stay visible; earlier actions appear on hover or keyboard focus and remain visible on touch devices. Copy writes the message text to the clipboard. Delete removes that message from saved history and future task context; it is disabled during active or unresolved tasks and pending submissions. Like and Dislike are placeholders.
+
 Run `npm test --workspace @agent/agent-frontend` for output deduplication, pinned-node eligibility, unknown execution handling, connection URL validation and uncertain-submission retry behavior.
 
 Add components using `npm run ui:add --workspace @agent/agent-frontend -- <component>`. `components.json` configures the Tailwind v4 stylesheet and source aliases.

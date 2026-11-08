@@ -9,6 +9,7 @@ import {
   heartbeatSchema,
   submitMessageSchema,
   modelSelectionSchema,
+  deleteMessageSchema,
 } from "@agent/contracts";
 import type { Config } from "./config.js";
 import { ApiError } from "./errors.js";
@@ -109,7 +110,7 @@ export async function startBackend(
         );
       res.setHeader("access-control-allow-origin", requestOrigin);
       res.setHeader("vary", "Origin");
-      res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
+      res.setHeader("access-control-allow-methods", "GET,POST,DELETE,OPTIONS");
       res.setHeader(
         "access-control-allow-headers",
         "Authorization,Content-Type,Idempotency-Key,Last-Event-ID",
@@ -189,6 +190,22 @@ export async function startBackend(
     );
     if (req.method === "GET" && conversation) {
       json(res, 200, await store.conversation(conversation[1]!));
+      return;
+    }
+    const message = path.match(
+      new RegExp(`^/v1/conversations/(${uuid})/messages/(${uuid})$`),
+    );
+    if (req.method === "DELETE" && message) {
+      const input = deleteMessageSchema.parse(await body(req));
+      json(
+        res,
+        200,
+        await store.deleteMessage(
+          message[1]!,
+          message[2]!,
+          input.expectedRevision,
+        ),
+      );
       return;
     }
     const messages = path.match(
