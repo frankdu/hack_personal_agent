@@ -51,6 +51,7 @@ test(
     const nodeToken = randomUUID();
     let modelCalls = 0;
     let toolResults = 0;
+    const chatRequests: any[] = [];
     const model = createServer(async (req, res) => {
       if (req.url === "/v1/models") {
         res.setHeader("content-type", "application/json");
@@ -82,6 +83,7 @@ test(
         return;
       }
       modelCalls++;
+      chatRequests.push(body);
       const toolResult = body.messages.some(
         (m: any) =>
           m.role === "tool" &&
@@ -124,9 +126,14 @@ test(
         chunk({}, "tool_calls");
       } else {
         chunk({
-          content: toolResult
-            ? "Tool read validated."
-            : "Hello from the local test model.",
+          content:
+            body.max_tokens === 1
+              ? "I"
+              : toolResult
+                ? "Tool read validated."
+                : content.includes("write a python hello world program")
+                  ? 'print("Hello, world!")'
+                  : "Hello from the local test model.",
         });
         chunk({}, "stop");
       }
@@ -185,7 +192,7 @@ test(
         profileId: "gemma-local",
         modelId: "test-gemma",
         endpoint: `http://127.0.0.1:${modelPort}/v1`,
-        contextWindow: 8192,
+        contextWindow: 4096,
         maxTokens: 2048,
         startupTimeoutMs: 5000,
         probeIntervalMs: 10000,
@@ -296,6 +303,48 @@ test(
     );
     assert.equal(history.messages.at(-1)?.text, result.output);
 
+    // A second turn must retain history and a usable output budget on 4K runtimes.
+    const followup = await api(
+      `/v1/conversations/${conv.id}/messages`,
+      {
+        ...body,
+        text: "write a python hello world program",
+        expectedRevision: history.revision,
+      },
+      randomUUID(),
+    );
+    assert.equal(followup.status, 202, JSON.stringify(followup.body));
+    const followupTask = taskResponseSchema.parse(followup.body).task;
+    const followupResult = await finish(followupTask.id);
+    assert.equal(followupResult.status, "succeeded");
+    assert.equal(followupResult.output, 'print("Hello, world!")');
+    assert.equal(chatRequests.length, 2);
+    for (const request of chatRequests) {
+      assert.equal(request.stream, true);
+      assert.ok(request.max_tokens > 1 && request.max_tokens <= 2048);
+    }
+    assert.deepEqual(
+      chatRequests[1].messages
+        .filter((message: any) => ["user", "assistant"].includes(message.role))
+        .map((message: any) => ({
+          role: message.role,
+          content:
+            typeof message.content === "string"
+              ? message.content
+              : message.content.map((part: any) => part.text).join(""),
+        })),
+      [
+        { role: "user", content: "Hello" },
+        { role: "assistant", content: result.output },
+        { role: "user", content: "write a python hello world program" },
+      ],
+    );
+    const followupHistory = conversationSchema.parse(
+      (await api(`/v1/conversations/${conv.id}`)).body,
+    );
+    assert.equal(followupHistory.messages.length, 4);
+    assert.equal(followupHistory.activeTaskId, null);
+
     // A manually selected unavailable target cannot fall back silently.
     assert.equal(
       (
@@ -303,7 +352,7 @@ test(
           `/v1/conversations/${conv.id}/messages`,
           {
             ...body,
-            expectedRevision: history.revision,
+            expectedRevision: followupHistory.revision,
             routing: { mode: "manual", nodeId: randomUUID() },
           },
           randomUUID(),

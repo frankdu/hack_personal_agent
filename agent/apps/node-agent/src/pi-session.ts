@@ -20,6 +20,7 @@ import type { ExecutionRequest } from "@agent/contracts";
 import type { NodeConfig } from "./config.js";
 import type { RuntimeManifest } from "./runtime.js";
 import type { Executor, RunHooks } from "./executions.js";
+import { localModelPayload } from "./model-payload.js";
 
 export function isolatedResources(): ResourceLoader {
   const runtime = createExtensionRuntime();
@@ -221,16 +222,15 @@ export class PiExecutor implements Executor {
       }),
       sessionManager: manager,
     });
-    if (this.manifest.ollama) {
-      const onPayload = session.agent.onPayload;
-      session.agent.onPayload = async (payload, currentModel) => ({
-        ...(((await onPayload?.(payload, currentModel)) ?? payload) as Record<
+    const onPayload = session.agent.onPayload;
+    session.agent.onPayload = async (payload, currentModel) =>
+      localModelPayload(
+        ((await onPayload?.(payload, currentModel)) ?? payload) as Record<
           string,
           unknown
-        >),
-        reasoning_effort: "none",
-      });
-    }
+        >,
+        this.manifest,
+      );
     let output = "";
     let pending = Promise.resolve();
     let lastFlush = 0;
