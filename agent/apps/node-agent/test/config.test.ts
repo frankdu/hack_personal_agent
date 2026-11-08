@@ -10,6 +10,14 @@ test("tool access is opt-in and SDK selection syntax cannot bypass the allowlist
   }
 });
 
+test('Ollama discovery defaults to local measurement and validates configuration', () => {
+  assert.equal(readConfig({}).ollama.enabled, true);
+  assert.equal(readConfig({}).ollama.minTokensPerSecond, 20);
+  assert.equal(readConfig({ OLLAMA_AUTO_DISCOVER: 'false' }).ollama.enabled, false);
+  assert.deepEqual(readConfig({ OLLAMA_MODEL_PRIORITY: 'gemma4:31b,qwen3:8b,gemma4:31b' }).ollama.modelPriority, ['gemma4:31b', 'qwen3:8b']);
+  for (const env of [{ OLLAMA_AUTO_DISCOVER: 'no' }, { OLLAMA_MIN_TOKENS_PER_SECOND: '19' }, { OLLAMA_BENCHMARK_TIMEOUT_MS: 'NaN' }, { OLLAMA_URL: 'https://hosted.example' }, { OLLAMA_URL: 'http://localhost:11434/api' }]) assert.throws(() => readConfig(env));
+});
+
 test("deployment configuration rejects invalid modes, ports, and partial model selection", () => {
   assert.equal(readConfig({ MODE: "PROD" }).mode, "PROD");
   assert.equal(readConfig({}).host, "127.0.0.1");

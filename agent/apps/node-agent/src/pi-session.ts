@@ -73,6 +73,13 @@ export class PiExecutor implements Executor {
       } };
     });
     const { session } = await createAgentSession({ cwd: this.config.workspaceDir, agentDir: this.config.stateDir, modelRuntime, model, thinkingLevel: 'off', tools: [...request.allowedTools], customTools: tools, resourceLoader: isolatedResources(), settingsManager: SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false } }), sessionManager: manager });
+    if (this.manifest.ollama) {
+      const onPayload = session.agent.onPayload;
+      session.agent.onPayload = async (payload, currentModel) => ({
+        ...((await onPayload?.(payload, currentModel) ?? payload) as Record<string, unknown>),
+        reasoning_effort: 'none',
+      });
+    }
     let output = ''; let pending = Promise.resolve(); let lastFlush = 0; let streamError = false;
     const unsubscribe = session.subscribe(event => {
       if (event.type === 'message_update' && event.assistantMessageEvent.type === 'text_delta') {

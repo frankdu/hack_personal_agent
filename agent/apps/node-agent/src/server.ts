@@ -5,7 +5,7 @@ import type { NodeConfig } from './config.js';
 import { Executions, RequestError } from './executions.js';
 export interface ServerDependencies {
   executions: Executions; hardware: Hardware; nodeId: string; bootId: string;
-  profiles: () => unknown[]; registered: () => boolean;
+  profiles: () => unknown[]; registered: () => boolean; discoveryStatus?: () => string | undefined;
 }
 async function body(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = []; let size = 0;
@@ -26,7 +26,7 @@ export function createNodeServer(config: NodeConfig, dependencies?: ServerDepend
       const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
       if (request.method === 'GET' && pathname === '/health/live') return send(draining ? 503 : 200, { status: draining ? 'draining' : 'alive', mode: config.mode });
       if (request.method === 'GET' && pathname === '/health/ready') return send(!draining && dependencies?.executions.ready() ? 200 : 503, { ready: !draining && Boolean(dependencies?.executions.ready()) });
-      if (request.method === 'GET' && pathname === '/v1/node/status') return send(200, { name: config.name, mode: config.mode, nodeId: dependencies?.nodeId, bootId: dependencies?.bootId, enabledTools: config.enabledTools, hardware: dependencies?.hardware, profiles: dependencies?.profiles() ?? [], registered: dependencies?.registered() ?? false, executionReady: !draining && Boolean(dependencies?.executions.ready()) });
+      if (request.method === 'GET' && pathname === '/v1/node/status') return send(200, { name: config.name, mode: config.mode, nodeId: dependencies?.nodeId, bootId: dependencies?.bootId, enabledTools: config.enabledTools, hardware: dependencies?.hardware, profiles: dependencies?.profiles() ?? [], modelDiscovery: dependencies?.discoveryStatus?.(), registered: dependencies?.registered() ?? false, executionReady: !draining && Boolean(dependencies?.executions.ready()) });
       if (!authenticated(request.headers.authorization, config.sharedToken)) throw new RequestError(401, 'unauthorized');
       if (!dependencies) throw new RequestError(503, 'execution_not_configured');
       if (request.method === 'POST' && pathname === '/v1/executions') {

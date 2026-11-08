@@ -1,6 +1,6 @@
 # Node agent
 
-Persistent Node 24 service embedding `@earendil-works/pi-coding-agent` 1.5.0. It enrolls with the backend, supervises one configured local model runtime, and executes one task at a time. It supports native macOS/Linux and Docker deployment; macOS Metal requires a native service.
+Persistent Node 24 service embedding `@earendil-works/pi-coding-agent` 1.5.0. It enrolls with the backend, discovers installed Ollama models or supervises an explicitly configured local runtime, and executes one task at a time. It supports native macOS/Linux and Docker deployment; macOS Metal requires a native service.
 
 From the workspace root, run `npm run dev:node`. Build with `npm run build -w @agent/node-agent` after building shared contracts. `src/app.ts` exports `startNode(config)` for integration tests; the returned `close()` drains execution, enrollment, runtime and HTTP resources.
 
@@ -20,12 +20,32 @@ From the workspace root, run `npm run dev:node`. Build with `npm run build -w @a
 | `NODE_SHARED_TOKEN` | Unset | Shared initial bearer credential, at least 32 characters when enrolled |
 | `RUNTIME_CONFIG` | Unset | Operator-controlled local runtime manifest JSON path |
 | `MODEL_PROVIDER`, `MODEL_ID` | Unset | Legacy paired model selector; runtime manifest is authoritative for served model identity, provider can override the local SDK provider name |
+| `OLLAMA_AUTO_DISCOVER` | `true` | Discover and benchmark local installed models when `RUNTIME_CONFIG` is unset |
+| `OLLAMA_URL` | `http://127.0.0.1:11434` | Local loopback HTTP origin; no credentials, paths or remote hosts |
+| `OLLAMA_MIN_TOKENS_PER_SECOND` | `20` | Minimum measured generation speed, at least 20 |
+| `OLLAMA_MODEL_PRIORITY` | Empty | Optional comma-separated exact IDs, ranked first; speed and capability checks still apply |
+| `OLLAMA_CONTEXT_WINDOW` | `8192` | Upper bound on advertised context; capped by model metadata and configured `num_ctx` (conservative 4096 when unspecified) |
+| `OLLAMA_BENCHMARK_TIMEOUT_MS` | `180000` | Timeout for each bounded benchmark request, including model loading |
+| `OLLAMA_BENCHMARK_TTL_MS` | `21600000` | Measurement cache lifetime, six hours by default |
+| `OLLAMA_REFRESH_INTERVAL_MS` | `60000` | Idle inventory refresh interval |
 
 Keep state outside the tool workspace. Do not mount a Docker socket or provider credentials into the workspace. This release has a shared provisioning credential; per-node credentials and mTLS remain production work.
 
+## Automatic Ollama selection
+
+With no `RUNTIME_CONFIG`, startup lists `/api/tags` and reads `/api/show` metadata. All installed models appear in fleet profiles. Automatic selection admits local Gemma 4 and Qwen models with completion and tool support, a known parameter count, and weights no larger than 80% of total machine memory. Cloud-backed models are excluded. Ollama remains responsible for loading and actual memory admission; a failed/OOM/timeout benchmark is ineligible, never an assumed pass.
+
+Each eligible model gets a one-token warmup followed by two 128-token synthetic chat samples, with thinking disabled. Samples must contain text and at least 64 generated tokens. Speed is `eval_count / (eval_duration / 1e9)`, using Ollama's generation timing, excluding loading and prompt evaluation. Both samples must meet the minimum. The slower result is shown in the UI. The benchmark uses Ollama's default runtime context, as the OpenAI execution API does; it does not change the server's context configuration. Pi requests also disable thinking through `reasoning_effort: none`.
+
+"Most powerful" is implemented as largest total parameter count, then natural model-name order for ties. This is an explicit capacity proxy, not a cross-family quality score (MoE active parameters and quantization can change the tradeoff). Set `OLLAMA_MODEL_PRIORITY` to express a preferred quality order. Only the highest ranked passing model becomes ready; other installed models retain their measurement or exclusion reason. The selected model must also pass the OpenAI-compatible endpoint warmup. An incompatible winner falls back to the next passing model.
+
+Discovery starts after HTTP listening and enrollment, so the node stays visible during benchmarking. Inventory refreshes and benchmarking wait for all active/unknown attempts to clear, and withdraw readiness while changing models. Benchmark weights are unloaded between candidates; the winner is warmed again. Measurements persist under the private state directory, keyed by model digest/name, hardware, Ollama version, context admission and benchmark revision. Changed weights/runtime/hardware or expired measurements trigger new samples. Benchmarks use only synthetic local text and can take several minutes on first startup. They measure short-prompt generation under current load, not a guarantee for every future context or concurrent workload. Failed discovery is reported by `modelDiscovery` in `/v1/node/status` and retried; a failed scan is not reported as an empty successful inventory.
+
+Run the node beside Ollama on the host. A container's loopback does not reach the host's Ollama. `OLLAMA_AUTO_DISCOVER=false` disables the behavior. An explicit runtime manifest always takes precedence.
+
 ## Local runtime configuration
 
-The runtime is explicitly operator selected; discovery does not automatically download or launch a model. Example for an already running local OpenAI-compatible Gemma server:
+For an explicit runtime override, set `RUNTIME_CONFIG` to an absolute manifest path and restart the node. Example for an already running local OpenAI-compatible Gemma server:
 
 ```json
 {
@@ -61,6 +81,22 @@ Native profiles add:
 This fragment is not a valid launch manifest until supplied with a real checksum and the common fields. The artifact is hashed before launch; the operator approves the executable and argument array. No shell interprets launch arguments. Native runtimes cannot be adopted after a crash: an occupied port is rejected, and the service never kills an arbitrary previous PID.
 
 Docker profiles add `docker.image` pinned as `repository@sha256:...`, `command` array, `containerPort`, `artifactPath`, `artifactSha256`, `modelMountPath`, `memoryBytes`, `cpus`, and optional `gpus` (`all` or `device=0`). The image must already exist (`--pull=never`). Model artifact mounts are read-only, host publication is loopback, and container name plus labels include the owning node/profile and manifest digest. Reconciliation can adopt an owned matching container even if a crash preceded its journal commit; ownership or image mismatch prevents adoption/removal. No global prune is used. Current Docker management assumes the service and Docker daemon share host path and loopback namespaces; Docker Desktop or a containerized controller needs explicit operator topology work before managed sibling-container use.
+
+## Optional managed vLLM Docker runtime
+
+Yes: a native Linux node with host Docker and an NVIDIA GPU can launch, probe, warm, adopt, recover and stop its own vLLM container. Copy [examples/vllm-runtime.json](examples/vllm-runtime.json), replace the image digest, model directory and checksum, and measure appropriate RAM/GPU/context budgets. This is an opt-in override through `RUNTIME_CONFIG`; no vLLM image or model is pulled automatically, and the Ollama speed-selection policy applies only to discovery.
+
+Provision a compatible vLLM image and a complete materialized model directory (config, tokenizer, safetensors weights) beforehand. Ollama tags are not vLLM model paths; MLX artifacts are not CUDA safetensors checkpoints. If downloading from the Hub, use `hf download <repo> --local-dir /absolute/model/path` with an exact revision. The mounted directory must contain regular files with no symlinks. After provisioning, compute its tree checksum:
+
+```sh
+npm run runtime:hash -w @agent/node-agent -- /absolute/model/path
+```
+
+For a directory, the checksum is SHA256 of sorted depth-first file entries, each encoded as a JSON `[relativePosixPath, fileSha256]` followed by a newline. Any file change invalidates admission. Single-file checksums keep their existing semantics. Hashing large weights adds startup time. Keep the directory stable after hashing.
+
+The vLLM manifest uses `docker.engine: vllm`, explicit `gpus`, and `shmBytes` (default 2 GiB, bounded by container RAM). The node mounts the checksummed model read-only, passes offline Hub/Transformers flags, publishes only loopback, and uses existing ownership/digest checks for recovery and cleanup. Set the server's `--served-model-name`, port and context to match the common manifest fields. The example's `hermes` tool parser targets Qwen3; choose the parser/chat template appropriate for the exact model and image version. No provider token is needed in the offline container.
+
+This managed CUDA option rejects macOS/Docker Desktop and nodes without detected NVIDIA/host Docker support before launch. On Apple Silicon, keep native Ollama/MLX or configure an external native vLLM-Metal endpoint. Docker Model Runner also offers a vLLM-Metal backend, but it executes natively on macOS, not inside a Metal-enabled Linux container. See [vLLM Docker deployment](https://docs.vllm.ai/en/latest/deployment/docker/), [Ollama model metadata](https://docs.ollama.com/api-reference/show-model-details), [Ollama generation timing](https://docs.ollama.com/api/chat), and [Docker's macOS vLLM-Metal explanation](https://www.docker.com/blog/docker-model-runner-vllm-metal-macos/).
 
 Runtime health probes run periodically. Recovery has bounded attempts with exponential delay. Shutdown serializes against startup/recovery. A failed runtime aborts current work; uncertain attempts are never automatically replayed.
 

@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { conversationSchema, decisionSchema, enabledToolSchema, nodesResponseSchema, PROTOCOL_VERSION, taskResponseSchema, taskSchema, type EnabledTool, type FleetNode, type SubmitMessage } from "@agent/contracts";
+import { conversationSchema, decisionSchema, enabledToolSchema, nodesResponseSchema, PROTOCOL_VERSION, taskResponseSchema, taskSchema, type EnabledTool, type FleetNode, type ModelProfile, type SubmitMessage } from "@agent/contracts";
 import { ArrowUp, ArrowUpRight, Check, Cpu, Layers3, MessageSquare, Network, Plus, Radio, RefreshCw, Settings2, ShieldCheck, Sparkles, Square, Terminal, Unplug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest, errorText, normalizeBackendUrl, submissionMayHaveSucceeded, type Connection } from "@/lib/api";
@@ -215,5 +215,17 @@ function ChatWorkspace({ connection, onSettings, onDisconnect }: { connection: C
 
 function NodeCard({ node, pinned, onPin, disabled }: { node: FleetNode; pinned: boolean; onPin: () => void; disabled: boolean }) {
   const gb = (bytes: number) => `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
-  return <article className={`node-card ${pinned ? "is-pinned" : ""}`}><div className="node-title"><Cpu size={15} /><h3>{node.name}</h3><span className={`node-status ${node.status}`}>{node.status}</span></div><p>{node.hardware.platform} · {node.hardware.arch} · {node.hardware.cpuCores} cores</p><p>{gb(node.hardware.availableMemoryBytes)} free / {gb(node.hardware.memoryBytes)}</p>{node.hardware.gpus.map((gpu, index) => <p key={`${gpu.name}-${index}`}>{gpu.name}{gpu.memoryBytes ? ` · ${gb(gpu.memoryBytes)}` : ""}</p>)}<div className="node-models">{node.profiles.length ? node.profiles.map((profile) => <div key={profile.id}><span title={profile.modelId}>{profile.modelId}</span><strong className={profile.state}>{profile.state}</strong></div>) : <p>No model profiles configured</p>}</div><p className="node-tools">Tools: {node.enabledTools.join(", ") || "none"}</p><p className="node-tools">Workspaces: {node.workspaceIds.join(", ")}</p><p className="node-tools">Active tasks: {node.activeAttempts.length}</p><Button type="button" variant={pinned ? "default" : "outline"} size="sm" disabled={disabled} onClick={onPin}>{pinned ? "Pinned for next task" : "Route to this node"}</Button></article>;
+  return <article className={`node-card ${pinned ? "is-pinned" : ""}`}><div className="node-title"><Cpu size={15} /><h3>{node.name}</h3><span className={`node-status ${node.status}`}>{node.status}</span></div><p>{node.hardware.platform} · {node.hardware.arch} · {node.hardware.cpuCores} cores</p><p>{gb(node.hardware.availableMemoryBytes)} free / {gb(node.hardware.memoryBytes)}</p>{node.hardware.gpus.map((gpu, index) => <p key={`${gpu.name}-${index}`}>{gpu.name}{gpu.memoryBytes ? ` · ${gb(gpu.memoryBytes)}` : ""}</p>)}<div className="node-models">{node.profiles.length ? node.profiles.map((profile) => <ModelRow key={profile.id} profile={profile} />) : <p>No models discovered yet. Start Ollama or configure a runtime.</p>}</div><p className="node-tools">Tools: {node.enabledTools.join(", ") || "none"}</p><p className="node-tools">Workspaces: {node.workspaceIds.join(", ")}</p><p className="node-tools">Active tasks: {node.activeAttempts.length}</p><Button type="button" variant={pinned ? "default" : "outline"} size="sm" disabled={disabled} onClick={onPin}>{pinned ? "Pinned for next task" : "Route to this node"}</Button></article>;
+}
+
+function ModelRow({ profile }: { profile: ModelProfile }) {
+  const discovery = profile.discovery;
+  return <div className="model-row">
+    <div><span title={profile.modelId}>{profile.modelId}</span><strong className={profile.state}>{discovery?.selected ? `selected · ${profile.state}` : profile.state === 'starting' && discovery ? 'benchmarking' : profile.state}</strong></div>
+    {discovery && <p>
+      {discovery.parameterCount !== undefined && `${(discovery.parameterCount / 1e9).toFixed(1)}B · `}
+      {discovery.tokensPerSecond !== undefined && <span title={discovery.measuredAt ? `Measured ${new Date(discovery.measuredAt).toLocaleString()}; slower of two generation samples` : undefined}>{discovery.tokensPerSecond.toFixed(1)} tokens/s · </span>}
+      {discovery.reason}
+    </p>}
+  </div>;
 }

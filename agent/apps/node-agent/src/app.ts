@@ -4,7 +4,8 @@ import { join, relative, isAbsolute } from 'node:path';
 import { readConfig, type NodeConfig } from './config.js';
 import { durableWrite, readJson } from './storage.js';
 import { inspectHardware } from './hardware.js';
-import { loadRuntime, RuntimeSupervisor } from './runtime.js';
+import { loadRuntime, RuntimeSupervisor, validateRuntimeHardware } from './runtime.js';
+import { OllamaDiscovery } from './ollama.js';
 import { PiExecutor } from './pi-session.js';
 import { Enrollment } from './enrollment.js';
 import { Executions } from './executions.js';
@@ -31,34 +32,43 @@ export async function startNode(config: NodeConfig = readConfig()) {
   const stateWithinWorkspace = relative(config.workspaceDir, config.stateDir);
   if (config.enabledTools.length && (stateWithinWorkspace === '' || (!stateWithinWorkspace.startsWith('..') && !isAbsolute(stateWithinWorkspace)))) throw new Error('Private node state must be outside any tool-enabled workspace');
   const bootId = randomUUID(); const unlock = await acquire(config.stateDir, bootId);
-  let runtime: RuntimeSupervisor | undefined; let enrollment: Enrollment | undefined; let executions: Executions | undefined;
+  let runtime: RuntimeSupervisor | undefined; let discovery: OllamaDiscovery | undefined; let enrollment: Enrollment | undefined; let executions: Executions | undefined;
   try {
     const stored = await readJson(join(config.stateDir, 'identity.json')) as { nodeId: string } | undefined;
     const nodeId = stored?.nodeId ?? randomUUID();
     if (!/^[a-f0-9-]{36}$/.test(nodeId)) throw new Error('Invalid persisted identity');
     await durableWrite(join(config.stateDir, 'identity.json'), { nodeId });
     const [hardware, manifest] = await Promise.all([inspectHardware(), loadRuntime(config.runtimeConfigPath)]);
-    if (manifest) runtime = new RuntimeSupervisor(manifest, nodeId, config.stateDir, hardware.availableMemoryBytes);
-    const profiles = () => runtime ? [runtime.profile()] : [];
+    if (manifest) {
+      validateRuntimeHardware(manifest, hardware);
+      runtime = new RuntimeSupervisor(manifest, nodeId, config.stateDir, hardware.availableMemoryBytes);
+    } else if (config.ollama.enabled) discovery = new OllamaDiscovery(config.ollama, hardware, nodeId, config.stateDir, () => Boolean(executions?.activeIds().length));
+    const profiles = () => runtime ? [runtime.profile()] : discovery?.profiles() ?? [];
+    const readyProfile = () => runtime?.profile().state === 'ready' ? runtime.profile().id : discovery?.readyProfile();
     enrollment = new Enrollment(config, nodeId, bootId, hardware, profiles, () => executions?.activeIds() ?? []);
-    executions = new Executions(config, nodeId, bootId, () => enrollment!.current(), () => runtime?.profile().state === 'ready' ? runtime.profile().id : undefined, manifest ? new PiExecutor(config, manifest) : { run: async () => { throw new Error('No configured runtime'); } });
+    executions = new Executions(config, nodeId, bootId, () => enrollment!.current(), readyProfile, { run: async (request, hooks, signal) => {
+      const selected = manifest ?? discovery?.manifest;
+      if (!selected || selected.profileId !== request.profileId) throw new Error('No selected runtime for this profile');
+      return new PiExecutor(config, selected).run(request, hooks, signal);
+    } });
     await executions.initialize();
     enrollment.onLeaseLost = () => executions!.abort('lease_lost');
     if (runtime) runtime.onUnavailable = () => executions!.abort('runtime_unavailable');
-    const { server, drain } = createNodeServer(config, { executions, hardware, nodeId, bootId, profiles, registered: () => Boolean(enrollment!.current()) });
+    if (discovery) discovery.onUnavailable = () => executions!.abort('runtime_unavailable');
+    const { server, drain } = createNodeServer(config, { executions, hardware, nodeId, bootId, profiles, registered: () => Boolean(enrollment!.current()), discoveryStatus: () => discovery?.status });
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(config.port, config.host, () => { server.off('error', reject); resolve(); }); });
-    const starting = Promise.all([enrollment.start(), runtime?.start()]);
+    const starting = Promise.all([enrollment.start(), runtime?.start(), discovery?.start()]);
     let closing = false;
     const close = async () => {
       if (closing) return; closing = true; drain();
       try {
         await executions!.close();
-        await Promise.allSettled([enrollment!.close(), runtime?.close(), starting]);
+        await Promise.allSettled([enrollment!.close(), runtime?.close(), discovery?.close(), starting]);
       } finally {
         await new Promise<void>(resolve => { server.close(() => resolve()); server.closeIdleConnections(); });
         await unlock();
       }
     };
-    return { server, nodeId, bootId, executions, runtime, enrollment, close, started: starting };
-  } catch (error) { await runtime?.close().catch(() => {}); await enrollment?.close(); await unlock(); throw error; }
+    return { server, nodeId, bootId, executions, runtime, discovery, enrollment, close, started: starting };
+  } catch (error) { await discovery?.close().catch(() => {}); await runtime?.close().catch(() => {}); await enrollment?.close(); await unlock(); throw error; }
 }

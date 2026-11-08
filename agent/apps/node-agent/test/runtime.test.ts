@@ -4,7 +4,8 @@ import { mkdtemp, writeFile, rm, symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { parseRuntimeManifest, dockerRunArgs, DockerContainerRuntime } from '../src/runtime.js';
+import { parseRuntimeManifest, dockerRunArgs, DockerContainerRuntime, artifactSha256, verifyArtifact, validateRuntimeHardware } from '../src/runtime.js';
+import type { Hardware } from '@agent/contracts';
 import { assertWorkspacePath } from '../src/pi-session.js';
 const external = { kind: 'external', profileId: 'gemma', modelId: 'gemma-4', endpoint: 'http://127.0.0.1:8080/v1' };
 test('runtime endpoints and provisioning require explicit local immutable configuration', () => {
@@ -29,4 +30,30 @@ test('tool path guard rejects parent traversal and symlink escapes', async () =>
   const root = await mkdtemp(join(tmpdir(), 'workspace-')); const outside = await mkdtemp(join(tmpdir(), 'outside-'));
   try { await symlink(outside, join(root, 'escape')); await assertWorkspacePath(root, 'new/nested/file'); await assert.rejects(assertWorkspacePath(root, '../outside'), /outside/); await assert.rejects(assertWorkspacePath(root, 'escape/new-file'), /outside/); }
   finally { await rm(root, { recursive: true, force: true }); await rm(outside, { recursive: true, force: true }); }
+});
+
+test('vLLM Docker supports checksummed model directories, bounded shared memory and GPU admission', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vllm-model-'));
+  try {
+    await writeFile(join(dir, 'config.json'), '{"model_type":"qwen3"}');
+    await writeFile(join(dir, 'model.safetensors'), 'weights');
+    const digest = await artifactSha256(dir);
+    await verifyArtifact(dir, digest);
+    const manifest = parseRuntimeManifest({ ...external, kind: 'docker', requiredMemoryBytes: 1e9,
+      docker: { engine: 'vllm', image: `vllm/vllm-openai@sha256:${'a'.repeat(64)}`, artifactPath: dir, artifactSha256: digest, modelMountPath: '/models/qwen', memoryBytes: 4 * 1024 ** 3, gpus: 'all', command: ['--model', '/models/qwen', '--served-model-name', 'gemma-4'] } });
+    const args = dockerRunArgs(manifest, 'node', 'digest');
+    assert.ok(args.includes('--shm-size')); assert.ok(args.includes(String(2 * 1024 ** 3)));
+    assert.ok(args.includes('HF_HUB_OFFLINE=1')); assert.ok(args.includes('--gpus'));
+    assert.ok(args.includes(`type=bind,src=${dir},dst=/models/qwen,readonly`));
+    const linux: Hardware = { platform: 'linux', arch: 'x64', cpuModel: 'test', cpuCores: 8, memoryBytes: 32e9, availableMemoryBytes: 16e9, unifiedMemory: false, gpus: [{ name: 'NVIDIA', vendor: 'nvidia', memoryBytes: 24e9 }], docker: { available: true, scope: 'host' } };
+    validateRuntimeHardware(manifest, linux);
+    assert.throws(() => validateRuntimeHardware(manifest, { ...linux, platform: 'darwin', docker: { available: true, scope: 'vm' } }), /native Linux/);
+    assert.throws(() => validateRuntimeHardware(manifest, { ...linux, gpus: [] }), /NVIDIA/);
+    await writeFile(join(dir, 'model.safetensors'), 'changed weights');
+    await assert.rejects(verifyArtifact(dir, digest), /checksum/);
+    await symlink(join(dir, 'config.json'), join(dir, 'linked.json'));
+    await assert.rejects(artifactSha256(dir), /symlinks/);
+    assert.throws(() => parseRuntimeManifest({ ...manifest, docker: { ...manifest.docker, gpus: undefined } }), /GPU assignment/);
+    assert.throws(() => parseRuntimeManifest({ ...manifest, docker: { ...manifest.docker, shmBytes: 8 * 1024 ** 3 } }), /numeric limit/);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

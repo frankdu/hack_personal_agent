@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "runtime:hash": "node --import tsx src/hash-artifact.ts",
     "test": "node --import tsx --test test/*.test.ts"
   },
   "dependencies": {

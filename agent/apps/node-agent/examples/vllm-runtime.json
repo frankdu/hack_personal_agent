@@ -1,0 +1,33 @@
+{
+  "kind": "docker",
+  "profileId": "vllm-qwen",
+  "modelId": "qwen-local",
+  "endpoint": "http://127.0.0.1:8000/v1",
+  "contextWindow": 8192,
+  "maxTokens": 2048,
+  "startupTimeoutMs": 600000,
+  "probeIntervalMs": 10000,
+  "maxRestarts": 2,
+  "requiredMemoryBytes": 12884901888,
+  "docker": {
+    "engine": "vllm",
+    "image": "vllm/vllm-openai@sha256:REPLACE_WITH_APPROVED_LOCAL_IMAGE_DIGEST",
+    "artifactPath": "/absolute/path/to/materialized-qwen-model",
+    "artifactSha256": "REPLACE_WITH_MODEL_DIRECTORY_SHA256",
+    "modelMountPath": "/models/qwen",
+    "containerPort": 8000,
+    "memoryBytes": 17179869184,
+    "cpus": 8,
+    "gpus": "all",
+    "shmBytes": 2147483648,
+    "command": [
+      "--model", "/models/qwen",
+      "--served-model-name", "qwen-local",
+      "--host", "0.0.0.0",
+      "--port", "8000",
+      "--max-model-len", "8192",
+      "--enable-auto-tool-choice",
+      "--tool-call-parser", "hermes"
+    ]
+  }
+}

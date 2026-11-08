@@ -1,11 +1,12 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { access, readFile, realpath } from 'node:fs/promises';
+import { access, readFile, lstat, readdir } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { freemem } from 'node:os';
 import { createConnection } from 'node:net';
-import type { ModelProfile } from '@agent/contracts';
+import type { Hardware, ModelProfile } from '@agent/contracts';
 import { command, type Command } from './probes.js';
 import { durableWrite, readJson, Serial } from './storage.js';
 
@@ -13,8 +14,9 @@ export interface RuntimeManifest {
   kind: 'external' | 'native' | 'docker'; profileId: string; modelId: string; endpoint: string;
   contextWindow: number; maxTokens: number; startupTimeoutMs: number; probeIntervalMs: number; maxRestarts: number;
   requiredMemoryBytes: number;
+  ollama?: boolean;
   native?: { executable: string; args: string[]; artifactPath: string; artifactSha256: string };
-  docker?: { image: string; command: string[]; containerPort: number; artifactPath: string; artifactSha256: string; modelMountPath: string; memoryBytes: number; cpus: number; gpus?: string };
+  docker?: { image: string; command: string[]; containerPort: number; artifactPath: string; artifactSha256: string; modelMountPath: string; memoryBytes: number; cpus: number; gpus?: string; engine?: 'vllm'; shmBytes?: number };
 }
 const integer = (x: unknown, fallback: number, min: number, max: number) => {
   if (x === undefined) return fallback;
@@ -40,6 +42,7 @@ export function parseRuntimeManifest(input: unknown): RuntimeManifest {
     requiredMemoryBytes: integer(v.requiredMemoryBytes, 0, 0, Number.MAX_SAFE_INTEGER),
   };
   if (v.kind !== 'external' && result.requiredMemoryBytes < 1) throw new Error('Managed runtime requires an operator-measured requiredMemoryBytes budget');
+  if (v.ollama === true && v.kind === 'external') result.ollama = true;
   if (result.maxTokens >= result.contextWindow) throw new Error('maxTokens must be smaller than contextWindow');
   for (const kind of ['native', 'docker'] as const) if (v.kind === kind) {
     const spec = v[kind];
@@ -52,15 +55,49 @@ export function parseRuntimeManifest(input: unknown): RuntimeManifest {
       if (!isAbsolute(spec.modelMountPath ?? '') || spec.modelMountPath.includes(',') || spec.artifactPath.includes(',')) throw new Error('Invalid Docker model mount');
       if (spec.gpus !== undefined && (typeof spec.gpus !== 'string' || !/^(all|device=[0-9,]+)$/.test(spec.gpus))) throw new Error('Invalid explicit GPU assignment');
       result.docker = { image: spec.image, command: strings(spec.command ?? []), containerPort: integer(spec.containerPort, 8080, 1, 65535), artifactPath: spec.artifactPath, artifactSha256: spec.artifactSha256, modelMountPath: spec.modelMountPath, memoryBytes: integer(spec.memoryBytes, 8 * 1024 ** 3, 128 * 1024 ** 2, Number.MAX_SAFE_INTEGER), cpus: integer(spec.cpus, 4, 1, 1024), gpus: spec.gpus };
+      if (spec.engine !== undefined && spec.engine !== 'vllm') throw new Error('Unsupported Docker inference engine');
+      if (spec.engine === 'vllm') {
+        result.docker.engine = 'vllm';
+        if (!spec.gpus) throw new Error('vLLM Docker requires an explicit NVIDIA GPU assignment');
+        if (!result.docker.command.length) throw new Error('vLLM Docker requires explicit server arguments');
+      }
+      if (spec.shmBytes !== undefined || spec.engine === 'vllm') result.docker.shmBytes = integer(spec.shmBytes, 2 * 1024 ** 3, 64 * 1024 ** 2, result.docker.memoryBytes);
     }
   }
   return result;
 }
-export async function verifyArtifact(path: string, expected: string) {
-  await realpath(path);
+/** File SHA256, or a stable tree digest of relative POSIX names and file hashes. */
+export async function artifactSha256(path: string): Promise<string> {
+  const info = await lstat(path);
+  if (info.isSymbolicLink()) throw new Error('Runtime artifacts must not contain symlinks');
+  if (info.isDirectory()) {
+    const tree = createHash('sha256');
+    const visit = async (directory: string, prefix: string) => {
+      const entries = (await readdir(directory)).sort();
+      for (const name of entries) {
+        const child = join(directory, name); const relative = prefix ? `${prefix}/${name}` : name;
+        const entry = await lstat(child);
+        if (entry.isSymbolicLink()) throw new Error('Runtime artifacts must not contain symlinks');
+        if (entry.isDirectory()) await visit(child, relative);
+        else if (entry.isFile()) tree.update(JSON.stringify([relative, await artifactSha256(child)]) + '\n');
+        else throw new Error('Runtime artifacts must be regular files or directories');
+      }
+    };
+    await visit(path, '');
+    return tree.digest('hex');
+  }
+  if (!info.isFile()) throw new Error('Runtime artifacts must be regular files or directories');
   const hash = createHash('sha256');
   for await (const chunk of createReadStream(path)) hash.update(chunk);
-  if (hash.digest('hex') !== expected) throw new Error('Runtime artifact checksum mismatch');
+  return hash.digest('hex');
+}
+export async function verifyArtifact(path: string, expected: string) {
+  if (await artifactSha256(path) !== expected) throw new Error('Runtime artifact checksum mismatch');
+}
+export function validateRuntimeHardware(manifest: RuntimeManifest, hardware: Hardware) {
+  if (manifest.docker?.engine === 'vllm' && (hardware.platform !== 'linux' || !hardware.docker.available || hardware.docker.scope !== 'host' || !hardware.gpus.some(gpu => gpu.vendor === 'nvidia'))) {
+    throw new Error('vLLM Docker requires a native Linux node with host Docker and NVIDIA GPU access. Apple Silicon uses native Ollama/MLX or an external vLLM-Metal endpoint.');
+  }
 }
 export interface RuntimeAdapter { start(): Promise<void>; stop(): Promise<void>; }
 export class NativeProcessRuntime implements RuntimeAdapter {
@@ -85,7 +122,7 @@ export class NativeProcessRuntime implements RuntimeAdapter {
 }
 export function dockerRunArgs(manifest: RuntimeManifest, nodeId: string, digest: string): string[] {
   const d = manifest.docker!; const port = new URL(manifest.endpoint).port || '80';
-  return ['run', '-d', '--name', `curilo_agent-${nodeId}-${manifest.profileId}`, '--pull=never', '--restart=no', '--label', `curilo_agent.node=${nodeId}`, '--label', `curilo_agent.profile=${manifest.profileId}`, '--label', `curilo_agent.manifest=${digest}`, '--memory', String(d.memoryBytes), '--cpus', String(d.cpus), '--security-opt', 'no-new-privileges', '--cap-drop', 'ALL', '--publish', `127.0.0.1:${port}:${d.containerPort}`, '--mount', `type=bind,src=${d.artifactPath},dst=${d.modelMountPath},readonly`, ...(d.gpus ? ['--gpus', d.gpus] : []), d.image, ...d.command];
+  return ['run', '-d', '--name', `curilo_agent-${nodeId}-${manifest.profileId}`, '--pull=never', '--restart=no', '--label', `curilo_agent.node=${nodeId}`, '--label', `curilo_agent.profile=${manifest.profileId}`, '--label', `curilo_agent.manifest=${digest}`, '--memory', String(d.memoryBytes), '--cpus', String(d.cpus), '--security-opt', 'no-new-privileges', '--cap-drop', 'ALL', '--publish', `127.0.0.1:${port}:${d.containerPort}`, '--mount', `type=bind,src=${d.artifactPath},dst=${d.modelMountPath},readonly`, ...(d.gpus ? ['--gpus', d.gpus] : []), ...(d.shmBytes ? ['--shm-size', String(d.shmBytes)] : []), ...(d.engine === 'vllm' ? ['--env', 'HF_HUB_OFFLINE=1', '--env', 'TRANSFORMERS_OFFLINE=1', '--env', 'VLLM_NO_USAGE_STATS=1'] : []), d.image, ...d.command];
 }
 export class DockerContainerRuntime implements RuntimeAdapter {
   private containerId?: string;
@@ -136,19 +173,20 @@ export class RuntimeSupervisor {
   private state: ModelProfile['state'] = 'stopped';
   private recovering = false;
   private readonly lifecycle = new Serial();
+  private readonly abort = new AbortController();
   onUnavailable: () => void = () => {};
   constructor(readonly manifest: RuntimeManifest, nodeId: string, stateDir: string, private readonly admissionMemoryBytes = freemem()) {
     this.adapter = manifest.kind === 'native' ? new NativeProcessRuntime(manifest) : manifest.kind === 'docker' ? new DockerContainerRuntime(manifest, nodeId, stateDir) : { start: async () => {}, stop: async () => {} };
   }
   profile(): ModelProfile { return { id: this.manifest.profileId, modelId: this.manifest.modelId, runtime: this.manifest.kind, state: this.state, contextWindow: this.manifest.contextWindow, concurrency: 1 }; }
   async probe() {
-    const response = await fetch(`${this.manifest.endpoint}/models`, { signal: AbortSignal.timeout(3000), redirect: 'error' });
+    const response = await fetch(`${this.manifest.endpoint}/models`, { signal: AbortSignal.any([this.abort.signal, AbortSignal.timeout(3000)]), redirect: 'error' });
     if (!response.ok) throw new Error('Model endpoint unavailable');
     const data = await limitedJson(response) as { data?: { id: string }[] };
     if (!data.data?.some(m => m.id === this.manifest.modelId)) throw new Error('Served model identity mismatch');
   }
   async warm() {
-    const response = await fetch(`${this.manifest.endpoint}/chat/completions`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: this.manifest.modelId, messages: [{ role: 'user', content: 'Reply OK.' }], max_tokens: 1, stream: false }), signal: AbortSignal.timeout(30000), redirect: 'error' });
+    const response = await fetch(`${this.manifest.endpoint}/chat/completions`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: this.manifest.modelId, messages: [{ role: 'user', content: 'Reply OK.' }], max_tokens: 1, stream: false, ...(this.manifest.ollama ? { reasoning_effort: 'none' } : {}) }), signal: AbortSignal.any([this.abort.signal, AbortSignal.timeout(30000)]), redirect: 'error' });
     if (!response.ok) throw new Error('Model warmup failed');
     const payload = await limitedJson(response) as { choices?: { message?: { content?: unknown } }[] };
     if (!Array.isArray(payload.choices) || payload.choices.length === 0) throw new Error('Invalid model warmup response');
@@ -166,11 +204,11 @@ export class RuntimeSupervisor {
       await this.adapter.start();
       const deadline = Date.now() + this.manifest.startupTimeoutMs;
       while (!this.stopped) {
-        try { await this.probe(); break; } catch (error) { if (Date.now() >= deadline) throw error; await new Promise(resolve => setTimeout(resolve, 500)); }
+        try { await this.probe(); break; } catch (error) { if (Date.now() >= deadline) throw error; await delay(500, undefined, { signal: this.abort.signal }); }
       }
       if (this.stopped) return;
       await this.warm(); this.state = 'ready'; this.schedule();
-    } catch { this.state = 'failed'; this.onUnavailable(); this.schedule(); }
+    } catch { if (this.stopped) { this.state = 'stopped'; return; } this.state = 'failed'; this.onUnavailable(); this.schedule(); }
   }
   private schedule() { if (!this.stopped) this.timer = setTimeout(() => void this.lifecycle.run(() => this.tick()), this.manifest.probeIntervalMs); }
   private async tick() {
@@ -180,10 +218,11 @@ export class RuntimeSupervisor {
       await this.probe();
       if (this.state !== 'ready') { await this.warm(); this.state = 'ready'; }
     } catch {
+      if (this.stopped) return;
       this.state = 'failed'; this.onUnavailable();
       if (this.failures++ < this.manifest.maxRestarts) {
         try {
-          await new Promise(resolve => setTimeout(resolve, Math.min(1000 * 2 ** this.failures, 30000)));
+          await delay(Math.min(1000 * 2 ** this.failures, 30000), undefined, { signal: this.abort.signal });
           if (this.stopped) return;
           if (this.manifest.requiredMemoryBytes > Math.min(freemem(), this.admissionMemoryBytes) * 0.8) throw new Error('Insufficient memory');
           await this.adapter.stop(); await this.adapter.start(); await this.probe(); await this.warm(); this.state = 'ready';
@@ -191,11 +230,11 @@ export class RuntimeSupervisor {
       }
     } finally { this.recovering = false; this.schedule(); }
   }
-  async close() { this.stopped = true; clearTimeout(this.timer); await this.lifecycle.run(async () => { this.state = 'stopped'; await this.adapter.stop(); }); }
+  async close() { this.stopped = true; this.abort.abort(); clearTimeout(this.timer); await this.lifecycle.run(async () => { this.state = 'stopped'; await this.adapter.stop(); }); }
 }
 export async function loadRuntime(path?: string): Promise<RuntimeManifest | undefined> { return path ? parseRuntimeManifest(JSON.parse(await readFile(path, 'utf8'))) : undefined; }
 
-async function limitedJson(response: Response): Promise<unknown> {
+export async function limitedJson(response: Response): Promise<unknown> {
   const reader = response.body?.getReader(); if (!reader) throw new Error('Empty runtime response');
   const chunks: Uint8Array[] = []; let bytes = 0;
   try {

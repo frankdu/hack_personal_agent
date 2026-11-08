@@ -29,6 +29,11 @@ export const modelProfileSchema = z.object({
   id: z.string().min(1).max(128), modelId: z.string().min(1).max(256),
   runtime: z.enum(['native', 'docker', 'external']), state: z.enum(['stopped', 'starting', 'ready', 'failed']),
   contextWindow: z.number().int().positive(), concurrency: z.number().int().positive(),
+  discovery: z.object({
+    source: z.literal('ollama'), selected: z.boolean(), reason: z.string().max(256),
+    parameterCount: z.number().positive().optional(), tokensPerSecond: z.number().nonnegative().optional(),
+    measuredAt: time.optional(),
+  }).optional(),
 });
 export type ModelProfile = z.infer<typeof modelProfileSchema>;
 export const registrationSchema = z.object({

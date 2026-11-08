@@ -8,7 +8,7 @@ The React UI connects to a TypeScript backend, discovers nodes, submits chat wit
 
 Jev is the only routing judgment model. Hard eligibility checks, explicit pins and sole eligible placements run without an API call. Hosted judgments require `JEV_API_KEY` and the task's permission; deterministic fallback is separately configurable. Health probes never call Jev.
 
-Nodes inspect hardware and Docker availability. An operator-approved manifest selects a local external endpoint, native process, or Docker inference container. Nodes probe, warm and manage runtime lifecycle. Automatic Gemma catalog selection and GPU certification remain open work. No model or inference image is downloaded automatically.
+Nodes inspect hardware and Docker availability. Without a runtime manifest, they discover installed Ollama models and select the highest ranked Gemma 4/Qwen model measured at 20 tokens/second or better. An explicit manifest overrides discovery and selects a local external endpoint, native process, or Docker inference container, including vLLM on Linux/NVIDIA. Nodes probe, warm and manage runtime lifecycle. No model or inference image is downloaded automatically.
 
 | Path                  | Responsibility                                                                     |
 | --------------------- | ---------------------------------------------------------------------------------- |
@@ -34,7 +34,7 @@ npm run dev
 
 Open http://localhost:3300. In the connection form use backend `http://127.0.0.1:3100` and the `API_TOKEN` from your local `.env`. The browser keeps the token in memory; reconnect after refresh. The backend currently serves one trusted operator.
 
-Without a runtime manifest, the node registers with no ready model and chat stays unavailable. Follow the [node runtime examples](apps/node-agent/README.md), set `RUNTIME_CONFIG` to the manifest's absolute path in `.env`, and restart the node. Use the served Gemma model ID exactly as reported by its `/v1/models` endpoint. A configured runtime performs a small local inference request during warmup.
+Start Ollama locally with installed Gemma 4 or Qwen models. Without `RUNTIME_CONFIG`, the node automatically discovers them, runs bounded synthetic generation benchmarks, and selects the largest parameter count meeting the 20 tokens/second minimum in both samples. The page shows all installed models, measured speeds, selection and exclusion reasons. Benchmarks run while idle, cache for six hours, and never download models or use cloud inference. If no model qualifies, chat remains unavailable. See [node configuration](apps/node-agent/README.md) for ranking overrides, benchmark settings and the optional managed vLLM Docker runtime. An explicit `RUNTIME_CONFIG` takes precedence over discovery.
 
 Set `AGENT_WORKSPACE_DIR` to the project, `NODE_STATE_DIR` to a private directory outside that workspace, and `ENABLED_TOOLS` to allowed tool names. Both the node and each task must allow a tool. Tools default to empty. File paths are checked against the workspace; enabling `bash` grants the service user's shell permissions and is not an OS sandbox.
 
