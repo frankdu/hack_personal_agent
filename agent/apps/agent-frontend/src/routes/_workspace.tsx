@@ -160,7 +160,6 @@ function Workspace() {
                 required
                 value={baseUrl}
                 onChange={(event) => setBaseUrl(event.target.value)}
-                autoFocus
                 disabled={connecting}
               />
               <label htmlFor="operator-token">Operator token</label>
@@ -171,6 +170,7 @@ function Workspace() {
                 autoComplete="off"
                 value={token}
                 onChange={(event) => setToken(event.target.value)}
+                autoFocus
                 disabled={connecting}
               />
               <small>
