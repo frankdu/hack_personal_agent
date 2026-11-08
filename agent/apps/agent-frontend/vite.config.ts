@@ -8,5 +8,5 @@ import { defineConfig } from "vite";
 export default defineConfig({
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   plugins: [tailwindcss(), tanstackStart(), nitro({ preset: "node-server" }), react()],
-  server: { host: "0.0.0.0", port: 3000, strictPort: true },
+  server: { host: "0.0.0.0", port: Number(process.env.FRONTEND_PORT ?? 3000), strictPort: true },
 });

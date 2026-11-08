@@ -7,8 +7,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Personal Agent · Workspace" },
-      { name: "description", content: "One workspace for your personal agent and connected machines." },
+      { title: "Curilo Agent · Workspace" },
+      { name: "description", content: "One workspace for Curilo Agent and connected machines." },
     ],
     links: [{ rel: "stylesheet", href: stylesheet }],
   }),

@@ -15,6 +15,11 @@ export interface NodeConfig {
   enabledTools: EnabledTool[];
   modelProvider?: string;
   modelId?: string;
+  backendUrl?: string;
+  endpoint: string;
+  sharedToken?: string;
+  workspaceId: string;
+  runtimeConfigPath?: string;
 }
 
 export function readConfig(env: NodeJS.ProcessEnv = process.env): NodeConfig {
@@ -38,6 +43,16 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): NodeConfig {
     throw new Error("MODEL_PROVIDER and MODEL_ID must be supplied together");
   }
   const host = env.HOST?.trim() || "127.0.0.1";
+  const backendUrl = env.BACKEND_URL?.trim() || undefined;
+  const sharedToken = env.NODE_SHARED_TOKEN?.trim() || undefined;
+  const endpoint = env.NODE_ENDPOINT?.trim() || `http://127.0.0.1:${port}`;
+  for (const value of [backendUrl, endpoint].filter(Boolean)) {
+    const url = new URL(value!);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
+      throw new Error('Backend and node URLs must be HTTP(S) origins without credentials');
+    }
+  }
+  if (backendUrl && (!sharedToken || sharedToken.length < 32)) throw new Error('NODE_SHARED_TOKEN must contain at least 32 characters when BACKEND_URL is set');
   return {
     mode,
     host,
@@ -48,5 +63,10 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): NodeConfig {
     enabledTools: [...new Set(requested)] as EnabledTool[],
     modelProvider,
     modelId,
+    backendUrl,
+    endpoint: new URL(endpoint).origin,
+    sharedToken,
+    workspaceId: env.WORKSPACE_ID?.trim() || 'default',
+    runtimeConfigPath: env.RUNTIME_CONFIG ? resolve(env.RUNTIME_CONFIG) : undefined,
   };
 }

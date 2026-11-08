@@ -1,101 +1,82 @@
-# Personal agent workspace
+# Curilo Agent workspace
 
-An npm workspace for a unified agent UI and persistent per-machine Pi service.
+Work from this directory (`agent/`). [HANDOFF.md](HANDOFF.md) preserves the compact project context. The [research documents](research-docs/README.md) describe the target system; [IMPLEMENTATION.md](IMPLEMENTATION.md) tracks implemented behavior and remaining acceptance work.
 
-## What exists
+## Implemented path
 
-| Path | Current scope |
-|---|---|
-| `apps/agent-frontend` | React, TanStack Start/Query, Vite, Tailwind and shadcn foundation; honest disconnected chat/node UI |
-| `apps/node-agent` | Persistent HTTP service, liveness/readiness, CPU/memory inspection, explicit tool configuration, lazy Pi SDK session adapter |
-| `packages/contracts` | Shared deployment mode, tool names, routing preference schemas |
-| `compose.yaml` | PROD images plus PostgreSQL and optional containerized node |
-| `compose.dev.yaml` | DEV source watching and local PostgreSQL port |
+The React UI connects to a TypeScript backend, discovers nodes, submits chat with automatic or manual routing, displays the routing reason, and polls durable output. PostgreSQL commits the task, decision and outbox before dispatch. Each node journals acceptance before invoking the actual Pi SDK. Repeated request keys and execution IDs do not create another run. Unknown outcomes hold the conversation for reconciliation.
 
-The backend, node registration/heartbeats, real chat dispatch, GPU probing, Gemma runtime supervision and decision audit database migrations are **planned, not implemented**. PostgreSQL is provisioned for that work; no application writes to it yet. Node readiness deliberately returns 503 until execution support exists. No models download and no model API calls occur on startup.
+Jev is the only routing judgment model. Hard eligibility checks, explicit pins and sole eligible placements run without an API call. Hosted judgments require `JEV_API_KEY` and the task's permission; deterministic fallback is separately configurable. Health probes never call Jev.
+
+Nodes inspect hardware and Docker availability. An operator-approved manifest selects a local external endpoint, native process, or Docker inference container. Nodes probe, warm and manage runtime lifecycle. Automatic Gemma catalog selection and GPU certification remain open work. No model or inference image is downloaded automatically.
+
+| Path                  | Responsibility                                                                     |
+| --------------------- | ---------------------------------------------------------------------------------- |
+| `apps/agent-backend`  | Fleet leases, Jev, conversations, PostgreSQL audit/outbox, dispatch/reconciliation |
+| `apps/node-agent`     | Hardware inventory, runtime supervision, execution/tool journal and Pi SDK         |
+| `apps/agent-frontend` | Connection, fleet, chat, pinning, cancellation and routing explanations            |
+| `packages/contracts`  | Runtime schemas, TypeScript types, generated JSON Schema/OpenAPI                   |
+| `tests/integration`   | Actual backend/node/Pi against a scripted local inference endpoint                 |
 
 ## Native development
 
-Requires Node 24 (see `.nvmrc`) and npm 11. Exact application dependencies are pinned and the root lockfile is authoritative.
+Requires Node 24, npm 11 and Docker for PostgreSQL. Dependencies are pinned in the root lockfile.
 
 ```sh
 cd agent
 npm ci
+npm run setup:local
+docker compose -f compose.yaml -f compose.dev.yaml up -d postgres18
 npm run dev
 ```
 
-Frontend: http://localhost:3000. Node liveness: http://127.0.0.1:3101/health/live. Run just one app with `npm run dev:frontend` or `npm run dev:node`. Stop watch processes with Ctrl-C.
+`setup:local` creates an ignored, mode-0600 `.env` with distinct random user/node tokens; it preserves an existing file. Initial ports: frontend **3300**, backend **3100**, node **3101**, PostgreSQL **55432**. These avoid the common 3000/5432 ports already occupied by other local projects. Adjust conflicting ports and `FRONTEND_ORIGINS` together.
 
-Node configuration is read from the process environment. See [node-agent configuration](apps/node-agent/README.md). A native example with an explicit workspace is:
+Open http://localhost:3300. In the connection form use backend `http://127.0.0.1:3100` and the `API_TOKEN` from your local `.env`. The browser keeps the token in memory; reconnect after refresh. The backend currently serves one trusted operator.
 
-```sh
-MODE=DEV AGENT_WORKSPACE_DIR=/absolute/path/to/project npm run dev:node
-```
+Without a runtime manifest, the node registers with no ready model and chat stays unavailable. Follow the [node runtime examples](apps/node-agent/README.md), set `RUNTIME_CONFIG` to the manifest's absolute path in `.env`, and restart the node. Use the served Gemma model ID exactly as reported by its `/v1/models` endpoint. A configured runtime performs a small local inference request during warmup.
 
-Tools are disabled by default. Setting a working directory is not filesystem isolation. Do not enable shell/write tools for untrusted tasks until the execution isolation task is implemented.
+Set `AGENT_WORKSPACE_DIR` to the project, `NODE_STATE_DIR` to a private directory outside that workspace, and `ENABLED_TOOLS` to allowed tool names. Both the node and each task must allow a tool. Tools default to empty. File paths are checked against the workspace; enabling `bash` grants the service user's shell permissions and is not an OS sandbox.
+
+`npm run dev:backend` and `npm run dev:node` load `.env` independently. `npm run dev:frontend` starts only Vite; pass `FRONTEND_PORT=3300` when running it separately. Migrations run at backend startup under an advisory lock, or explicitly with `npm run db:migrate`. Set `AUTO_MIGRATE=false` after applying them separately if deployment roles require it.
+
+Run the macOS node natively for Metal. To connect a containerized backend to a native node, use `NODE_ENDPOINT=http://host.docker.internal:3101` and bind the node's `HOST=0.0.0.0` on a trusted development network. That endpoint must be in the backend allowlist.
 
 ## Docker Compose
 
-Copy `.env.example` to `.env` and replace `POSTGRES_PASSWORD`. This file is ignored by Git and excluded from Docker build context. Both commands below run from `agent/`.
-
-### DEV
-
 ```sh
-cp .env.example .env
-# Edit POSTGRES_PASSWORD in .env.
+# DEV: backend/frontend source watching plus PostgreSQL
 npm run compose:dev
-```
 
-This starts the frontend with hot reload and PostgreSQL. To also run the CPU-only node scaffold in a container:
-
-```sh
-docker compose -f compose.yaml -f compose.dev.yaml --profile node up --build
-```
-
-Source directories are bind-mounted for watching. Dependency and build-config changes require rebuilding the development image. Keep the macOS node service native (`npm run dev:node`) when using Apple Metal in the future: Docker Desktop's ordinary Linux containers do not provide native Metal to this process.
-
-For a native frontend and node with only PostgreSQL containerized:
-
-```sh
-docker compose -f compose.yaml -f compose.dev.yaml up -d postgres
-npm run dev
-```
-
-### PROD
-
-```sh
+# PROD mode: compiled servers plus PostgreSQL
 npm run compose:prod
-# Optional Linux CPU node scaffold:
+
+# Optional node; starts without a model by default
 docker compose -f compose.yaml --profile node up --build -d
 ```
 
-PROD uses compiled frontend/server output, `NODE_ENV=production`, `MODE=PROD`, non-root application users, persistent volumes, process init and restart policies. DEV overrides select `MODE=DEV`, development dependencies and source watchers. MODE is an application setting distinct from Vite's own mode and NODE_ENV; use the matching Compose files, not only an environment flag, to select a deployment.
+These configurations select `MODE=DEV` or `MODE=PROD` separately from `NODE_ENV`. PROD means compiled deployment mode; production acceptance gates are still open. Published application ports bind to loopback. PostgreSQL is published only in DEV. Changes outside mounted source directories require a rebuild.
 
-The frontend and node publish to loopback by default; PostgreSQL has no published port in PROD. Put an authenticated HTTPS ingress in front of the future backend/frontend for remote access. `FRONTEND_BIND` can change the bind address explicitly. This deploys the scaffold, not a completed multi-node agent product.
+The optional node persists `/data` and `/work`. It receives no host Docker socket, workspace or inference manifest automatically. For Docker-managed inference, start with a native node and operator-provisioned Docker CLI/daemon access. Images must already exist locally at immutable digests; model files require a matching SHA-256. Mount paths refer to the daemon host. Configure NVIDIA devices explicitly on suitable Linux hardware. The initial adapter does not manage remote Docker daemons.
 
-The optional containerized node stores state in `/data` and operates in `/work`; it does not mount the host filesystem or Docker socket. NVIDIA runtime provisioning and specific Gemma images are future tasks, rather than a GPU flag on an image with no inference runtime. PostgreSQL 18 data is mounted at `/var/lib/postgresql`, matching its image layout.
+Before remote production access, complete TLS, per-node enrollment, ingress and recovery work. Shared fleet credentials and one operator are the current scope.
 
 ```sh
-# Validate without starting services (requires POSTGRES_PASSWORD in .env).
 docker compose -f compose.yaml --profile node config --quiet
 docker compose -f compose.yaml -f compose.dev.yaml --profile node config --quiet
-
-# Stop services; retain data volumes.
 docker compose -f compose.yaml --profile node down
 ```
+
+`down` retains working data volumes.
 
 ## Verification
 
 ```sh
 npm run check
+npm run test:integration
+npm run protocol:generate
 ```
 
-Build runs shared packages before the services. TanStack Start generates its route tree during the frontend build. Node tests cover configuration rejection, disabled-by-default tools, readiness semantics and service endpoints without invoking an LLM.
+`check` builds, typechecks and runs unit/fixture tests. Database tests skip there unless `TEST_DATABASE_URL` is provided. `test:integration` creates its own disposable PostgreSQL container on an ephemeral port, runs database failure tests and the real Pi execution path, then removes that container. It does not use an existing database or download a model. Scripted inference proves transport, SDK, tool and cancellation behavior, not Gemma quality/performance.
 
-The TanStack production adapter currently uses the registry's Nitro release candidate; its exact version is pinned in the frontend manifest and lockfile. See the frontend README for adding shadcn components and its server output layout.
-
-See [validation results](VALIDATION.md) for completed checks and remaining coverage.
-
-## Parallel implementation
-
-Start with the [research index](research-docs/README.md), then dispatch the dependency-ready tasks in the implementation backlog. File ownership, prerequisites, deliverables and acceptance criteria belong with each task. Do not assign multiple agents to change the root lockfile concurrently: let one integration owner install dependencies and validate the combined result.
+See [VALIDATION.md](VALIDATION.md) for measured results. Commit generated protocol files alongside schema changes.

@@ -5,13 +5,15 @@
   "type": "module",
   "engines": { "node": ">=24 <25" },
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 3000",
+    "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "start": "node .output/server/index.mjs",
     "typecheck": "tsc --noEmit",
-    "ui:add": "shadcn add"
+    "ui:add": "shadcn add",
+    "test": "node --import tsx --test test/*.test.ts"
   },
   "dependencies": {
+    "@agent/contracts": "0.1.0",
     "@radix-ui/react-slot": "1.5.0",
     "@tanstack/react-query": "5.107.1",
     "@tanstack/react-router": "1.170.46",

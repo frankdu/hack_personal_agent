@@ -1,10 +1,10 @@
-name: personal-agent
+name: curilo_agent
 
 # Production baseline. Add compose.dev.yaml for DEV source watching.
-# The backend and model runtime are designed, not implemented in this scaffold.
+# Model runtimes are explicitly configured on each node; no implicit downloads.
 services:
-  postgres:
-    image: postgres:18-bookworm
+  postgres18:
+    image: postgres:18.6-trixie
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-agent}
       POSTGRES_USER: ${POSTGRES_USER:-agent}
@@ -17,6 +17,37 @@ services:
       timeout: 3s
       retries: 10
     restart: unless-stopped
+
+  agent-backend:
+    build:
+      context: .
+      target: backend-production
+    environment:
+      MODE: PROD
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3100"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-agent}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres18:5432/${POSTGRES_DB:-agent}
+      API_TOKEN: ${API_TOKEN:?Set API_TOKEN in agent/.env}
+      NODE_SHARED_TOKEN: ${NODE_SHARED_TOKEN:?Set NODE_SHARED_TOKEN in agent/.env}
+      NODE_ENDPOINT_ALLOWLIST: ${NODE_ENDPOINT_ALLOWLIST:-http://node-agent:3101,http://host.docker.internal:3101}
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      JEV_API_KEY: ${JEV_API_KEY:-}
+      AUTO_MIGRATE: "true"
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-3100}:3100"
+    depends_on:
+      postgres18:
+        condition: service_healthy
+    init: true
+    stop_grace_period: 30s
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3100/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
 
   agent-frontend:
     build:
@@ -51,12 +82,18 @@ services:
       ENABLED_TOOLS: ""
       NODE_STATE_DIR: /data
       AGENT_WORKSPACE_DIR: /work
+      BACKEND_URL: http://agent-backend:3100
+      NODE_ENDPOINT: http://node-agent:3101
+      NODE_SHARED_TOKEN: ${NODE_SHARED_TOKEN:?Set NODE_SHARED_TOKEN in agent/.env}
     ports:
       - "127.0.0.1:${NODE_AGENT_PORT:-3101}:3101"
     volumes:
       - node-data:/data
       - node-work:/work
     init: true
+    depends_on:
+      agent-backend:
+        condition: service_healthy
     stop_grace_period: 30s
     restart: unless-stopped
     healthcheck:

@@ -15,7 +15,7 @@ test("health distinguishes liveness from execution readiness and rejects task su
     const status = await fetch(`${origin}/v1/node/status`).then((response) => response.json());
     assert.equal(status.executionReady, false);
     assert.deepEqual(status.enabledTools, []);
-    assert.equal((await fetch(`${origin}/v1/tasks`, { method: "POST" })).status, 405);
+    assert.equal((await fetch(`${origin}/v1/tasks`, { method: "POST" })).status, 401);
     drain();
     assert.equal((await fetch(`${origin}/health/live`)).status, 503);
   } finally {
