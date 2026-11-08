@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test, vi } from "vitest";
 import assert from "node:assert/strict";
 import {
   conversationSchema,
@@ -192,16 +192,12 @@ test("transport and server failures retain idempotency key; definitive rejection
   );
 });
 
-test("authenticated submission places the token only in a header and preserves idempotency", async (context) => {
+test("authenticated submission places the token only in a header and preserves idempotency", async () => {
   let request: { url: string; init: RequestInit } | undefined;
-  context.mock.method(
-    globalThis,
-    "fetch",
-    async (url: string, init: RequestInit) => {
-      request = { url, init };
-      return new Response(JSON.stringify(task), { status: 200 });
-    },
-  );
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+    request = { url: String(url), init: init! };
+    return new Response(JSON.stringify(task), { status: 200 });
+  });
   const result = await apiRequest(
     { id, baseUrl: "https://backend.example", token: "test-operator-token" },
     "/v1/tasks/test",
@@ -217,10 +213,8 @@ test("authenticated submission places the token only in a header and preserves i
   assert.equal(request?.init.body, '{"test":true}');
 });
 
-test("invalid backend response is rejected instead of displayed as a task", async (context) => {
-  context.mock.method(
-    globalThis,
-    "fetch",
+test("invalid backend response is rejected instead of displayed as a task", async () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(
     async () =>
       new Response(
         JSON.stringify({ status: "running", output: "untrusted response" }),

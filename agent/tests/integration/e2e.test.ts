@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { onTestFinished, test } from "vitest";
 import { createServer, type Server } from "node:http";
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -44,9 +44,9 @@ async function eventually<T>(
 test(
   "PostgreSQL → routing audit → node journal → real Pi → local scripted inference",
   { skip: !process.env.TEST_DATABASE_URL, timeout: 90_000 },
-  async (t) => {
+  async () => {
     const root = await mkdtemp(join(tmpdir(), "curilo_agent-e2e-"));
-    t.after(() => rm(root, { recursive: true, force: true }));
+    onTestFinished(() => rm(root, { recursive: true, force: true }));
     const userToken = randomUUID();
     const nodeToken = randomUUID();
     let modelCalls = 0;
@@ -133,7 +133,7 @@ test(
       res.end("data: [DONE]\n\n");
     });
     const modelPort = await listen(model);
-    t.after(async () => {
+    onTestFinished(async () => {
       model.closeAllConnections();
       await new Promise<void>((resolve) => model.close(() => resolve()));
     });
@@ -151,7 +151,7 @@ test(
       }),
       port: 0,
     });
-    t.after(() => backend.close());
+    onTestFinished(() => backend.close());
     const base = `http://127.0.0.1:${(backend.server.address() as { port: number }).port}`;
     const api = async (path: string, body?: unknown, key?: string) => {
       const response = await fetch(base + path, {
@@ -205,7 +205,7 @@ test(
       RUNTIME_CONFIG: runtimePath,
     });
     const node = await startNode(config);
-    t.after(() => node.close());
+    onTestFinished(() => node.close());
     const fleet = await eventually(async () => {
       const nodes = nodesResponseSchema.parse(
         (await api("/v1/nodes")).body,

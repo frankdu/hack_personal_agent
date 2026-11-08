@@ -57,11 +57,10 @@ try {
   const child = spawn(
     process.execPath,
     [
-      "--import",
-      "tsx",
-      "--test",
-      "tests/integration/e2e.test.ts",
-      "apps/agent-backend/test/store.integration.test.ts",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "--config",
+      "vitest.integration.config.ts",
     ],
     {
       stdio: "inherit",

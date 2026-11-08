@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { createServer } from "node:net";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -102,10 +102,7 @@ async function artifact() {
 test(
   "native managed runtime launches a real process, warms, and stops its owned process",
   {
-    skip:
-      process.env.RUN_NATIVE_RUNTIME_TESTS !== "1"
-        ? "Set RUN_NATIVE_RUNTIME_TESTS=1 to run native process smoke tests"
-        : false,
+    skip: process.env.RUN_NATIVE_RUNTIME_TESTS !== "1",
     timeout: 30000,
   },
   async () => {
@@ -156,10 +153,7 @@ test(
 test(
   "Docker managed runtime warms, adopts after journal loss, and removes only its own container",
   {
-    skip:
-      process.env.RUN_DOCKER_RUNTIME_TESTS !== "1"
-        ? "Set RUN_DOCKER_RUNTIME_TESTS=1 with an already provisioned RUNTIME_SMOKE_IMAGE digest"
-        : false,
+    skip: process.env.RUN_DOCKER_RUNTIME_TESTS !== "1",
     timeout: 60000,
   },
   async () => {

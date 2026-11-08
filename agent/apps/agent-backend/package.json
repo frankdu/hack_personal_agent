@@ -12,13 +12,15 @@
     "start": "node dist/index.js",
     "migrate": "tsx src/migrate.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test test/*.test.ts"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@agent/contracts": "0.1.0",
     "pg": "8.23.1"
   },
   "devDependencies": {
-    "@types/pg": "8.23.1"
+    "@types/pg": "8.23.1",
+    "vitest": "5.1.0"
   }
 }

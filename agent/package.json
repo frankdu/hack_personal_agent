@@ -26,16 +26,18 @@
     "build:packages": "npm run build -w @agent/contracts",
     "build": "npm run build:packages && npm run build -w @agent/agent-backend && npm run build -w @agent/node-agent && npm run build -w @agent/agent-frontend",
     "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present",
-    "test": "npm run build:packages && npm run test --workspaces --if-present",
+    "test": "npm run build:packages && vitest run",
     "check": "npm run format:check && npm run build && npm run typecheck && npm test",
     "compose:dev": "docker compose -f compose.yaml -f compose.dev.yaml up --build",
-    "compose:prod": "docker compose -f compose.yaml up --build -d"
+    "compose:prod": "docker compose -f compose.yaml up --build -d",
+    "test:watch": "npm run build:packages && vitest"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
     "concurrently": "10.0.7",
     "prettier": "3.9.10",
     "tsx": "4.23.15",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
   }
 }

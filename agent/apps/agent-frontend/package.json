@@ -12,7 +12,8 @@
     "start": "node .output/server/index.mjs",
     "typecheck": "tsc --noEmit",
     "ui:add": "shadcn add",
-    "test": "node --import tsx --test test/*.test.ts"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@agent/contracts": "0.1.0",
@@ -37,6 +38,7 @@
     "shadcn": "4.23.0",
     "tailwindcss": "4.3.5",
     "typescript": "7.0.2",
-    "vite": "8.3.6"
+    "vite": "8.3.6",
+    "vitest": "5.1.0"
   }
 }

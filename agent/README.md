@@ -88,6 +88,8 @@ npm run test:integration
 npm run protocol:generate
 ```
 
+All npm workspaces use Vitest. Run `npm test` for all workspace tests, `npm test -w @agent/agent-frontend` for one workspace, or `npm run test:watch` (optionally with `-w <workspace>`) for watch mode. Each workspace has a separate `vitest.config.ts`; the root config collects them as named projects. Tests run in Node, including the frontend state tests, without starting the frontend's Vite plugins.
+
 `check` checks formatting, builds, typechecks and runs unit/fixture tests. Database tests skip there unless `TEST_DATABASE_URL` is provided. `test:integration` creates its own disposable PostgreSQL container on an ephemeral port, runs database failure tests and the real Pi execution path, then removes that container. It does not use an existing database or download a model. Scripted inference proves transport, SDK, tool and cancellation behavior, not Gemma quality/performance.
 
 See [VALIDATION.md](VALIDATION.md) for measured results. Commit generated protocol files alongside schema changes.

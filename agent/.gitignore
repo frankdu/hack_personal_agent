@@ -4,6 +4,7 @@ dist/
 .tanstack/
 .nitro/
 .vite/
+.vitest/
 coverage/
 .env
 .env.*
