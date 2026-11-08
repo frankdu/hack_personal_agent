@@ -18,7 +18,8 @@ export function eligibleCandidates(nodes: Array<{ node: FleetNode; reserved: num
     if (node.status !== 'online' || !node.workspaceIds.includes(input.policy.workspaceId)) return [];
     if (input.routing.mode === 'manual' && node.nodeId !== input.routing.nodeId) return [];
     if (!input.policy.allowedTools.every(t => node.enabledTools.includes(t))) return [];
-    return node.profiles.filter(p => p.state === 'ready' && Math.max(reserved, node.activeAttempts.length) < p.concurrency
+    return node.profiles.filter(p => p.state === 'ready' && (!input.routing.modelId || p.modelId === input.routing.modelId)
+      && Math.max(reserved, node.activeAttempts.length) < p.concurrency
       // Conservative estimate, not tokenizer admission: the node/runtime still validates actual input.
       && contextCharacters + 1024 < p.contextWindow).map(profile => ({ node, profile, reserved }));
   }).sort((a, b) => a.reserved - b.reserved || a.node.nodeId.localeCompare(b.node.nodeId) || a.profile.id.localeCompare(b.profile.id));
@@ -37,7 +38,7 @@ function validateJev(value: unknown, keys: string[], expectedModel: string): { c
 }
 export async function selectCandidate(candidates: Candidate[], input: SubmitMessage, config: Config, fetcher: typeof fetch = fetch): Promise<Selection> {
   const start = performance.now(); const first = candidates[0];
-  if (!first) throw new ApiError(409, 'NO_ELIGIBLE_NODE', 'No online ready node satisfies this workspace, tools, context and routing preference.');
+  if (!first) throw new ApiError(409, 'NO_ELIGIBLE_NODE', 'No online ready node satisfies the requested model, workspace, tools, context and routing preference.');
   const rule = (code: string, description: string): Selection => ({
     candidate: first, provider: 'rules', modelRevision: null, reasonCode: code,
     reason: `${description} Selected ${first.node.name} (${first.profile.modelId}); workspace and enabled tools matched, model is ready and capacity is available.`,
@@ -45,6 +46,7 @@ export async function selectCandidate(candidates: Candidate[], input: SubmitMess
   });
   if (input.routing.mode === 'manual') return rule('MANUAL_SELECTION', 'The user explicitly selected this eligible node.');
   if (candidates.length === 1) return rule('SOLE_ELIGIBLE_CANDIDATE', 'Only one placement is eligible.');
+  if (candidates.every(candidate => candidate.node.nodeId === first.node.nodeId)) return rule('SOLE_ELIGIBLE_NODE', 'Only one node is eligible.');
   if (!input.policy.allowHostedJudgment || !config.jevApiKey) {
     if (!input.policy.allowRulesFallback) throw new ApiError(503, 'JUDGMENT_UNAVAILABLE', 'Hosted judgment is unavailable and rules fallback is disabled.');
     return rule(input.policy.allowHostedJudgment ? 'JEV_NOT_CONFIGURED' : 'HOSTED_JUDGMENT_FORBIDDEN', 'Deterministic fallback selected the least reserved placement, with stable ID tie-breaking.');

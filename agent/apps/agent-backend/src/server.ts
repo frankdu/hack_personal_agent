@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
-import { registrationSchema, heartbeatSchema, submitMessageSchema } from '@agent/contracts';
+import { registrationSchema, heartbeatSchema, submitMessageSchema, modelSelectionSchema } from '@agent/contracts';
 import type { Config } from './config.js';
 import { ApiError } from './errors.js';
 import { Store } from './store.js';
@@ -59,6 +59,11 @@ export async function startBackend(config: Config, options: { dispatch?: boolean
     }
     if (!authorized(req, config.apiToken)) throw new ApiError(401, 'UNAUTHORIZED', 'User bearer token required.');
     if (req.method === 'GET' && path === '/v1/nodes') { json(res, 200, { nodes: (await store.nodes()).map(n => n.node) }); return; }
+    const nodeModel = path.match(new RegExp(`^/v1/nodes/(${uuid})/model$`));
+    if (req.method === 'POST' && nodeModel) {
+      const input = modelSelectionSchema.parse(await body(req));
+      json(res, 202, await store.selectModel(nodeModel[1]!, input.profileId)); return;
+    }
     if (req.method === 'POST' && path === '/v1/conversations') { json(res, 201, await store.createConversation()); return; }
     const conversation = path.match(new RegExp(`^/v1/conversations/(${uuid})$`));
     if (req.method === 'GET' && conversation) { json(res, 200, await store.conversation(conversation[1]!)); return; }

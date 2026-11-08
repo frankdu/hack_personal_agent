@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { conversationSchema, decisionSchema, enabledToolSchema, nodesResponseSchema, PROTOCOL_VERSION, taskResponseSchema, taskSchema, type EnabledTool, type FleetNode, type ModelProfile, type SubmitMessage } from "@agent/contracts";
-import { ArrowUp, ArrowUpRight, Check, Cpu, Layers3, MessageSquare, Network, Plus, Radio, RefreshCw, Settings2, ShieldCheck, Sparkles, Square, Terminal, Unplug } from "lucide-react";
+import { conversationSchema, decisionSchema, enabledToolSchema, modelSelectionResponseSchema, nodesResponseSchema, PROTOCOL_VERSION, taskResponseSchema, taskSchema, type EnabledTool, type FleetNode, type ModelProfile, type SubmitMessage } from "@agent/contracts";
+import { ArrowUp, ArrowUpRight, Check, Cpu, Layers3, LoaderCircle, MessageSquare, Network, Plus, Power, Radio, RefreshCw, Settings2, ShieldCheck, Sparkles, Square, Terminal, Unplug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest, errorText, normalizeBackendUrl, submissionMayHaveSucceeded, type Connection } from "@/lib/api";
-import { eligibleNode, isTaskActive, pendingAssistantOutput, selectedNodeProblem } from "@/lib/chat-state";
+import { eligibleNode, isTaskActive, pendingAssistantOutput, readyModelIds, selectedNodeProblem } from "@/lib/chat-state";
 
 export const Route = createFileRoute("/")({ component: Workspace });
 const decisionsSchema = { parse: (value: unknown) => {
@@ -64,6 +64,7 @@ function ChatWorkspace({ connection, onSettings, onDisconnect }: { connection: C
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState("");
   const [routing, setRouting] = useState("auto");
+  const [modelId, setModelId] = useState("");
   const [workspaceId, setWorkspaceId] = useState("default");
   const [allowedTools, setAllowedTools] = useState<EnabledTool[]>([]);
   const [allowHostedJudgment, setAllowHostedJudgment] = useState(true);
@@ -96,9 +97,12 @@ function ChatWorkspace({ connection, onSettings, onDisconnect }: { connection: C
   const active = !!conversation?.activeTaskId || !!task && isTaskActive(task.status);
   const nodes = nodesQuery.data?.nodes ?? [];
   const onlineNodes = nodes.filter((node) => node.status === "online");
+  const models = readyModelIds(nodes);
   const routingProblem = routing === "auto"
-    ? nodes.some((node) => eligibleNode(node, workspaceId, allowedTools)) ? null : "No online node has a ready model, this workspace, and every requested tool."
-    : selectedNodeProblem(nodes, routing, workspaceId, allowedTools);
+    ? nodes.some((node) => eligibleNode(node, workspaceId, allowedTools, modelId)) ? null : modelId
+      ? `No available node has ${modelId} active and ready with this workspace and every requested tool. Activate the model on a node, or choose Auto model.`
+      : "No available node has a ready model, this workspace, and every requested tool."
+    : selectedNodeProblem(nodes, routing, workspaceId, allowedTools, modelId);
   const output = pendingAssistantOutput(conversation, task);
   const latestDecision = decisionsQuery.data?.decisions.at(-1) ?? task?.decision;
   const suggestions = ["Explore a codebase", "Debug a failing test", "Plan a new feature"];
@@ -122,7 +126,8 @@ function ChatWorkspace({ connection, onSettings, onDisconnect }: { connection: C
         if (current.activeTaskId) throw new Error("This conversation already has an active task. Wait for it or cancel it first.");
         submission = { conversationId: current.id, key: crypto.randomUUID(), body: {
           protocolVersion: PROTOCOL_VERSION, text: draft.trim(), expectedRevision: current.revision,
-          routing: routing === "auto" ? { mode: "auto" } : { mode: "manual", nodeId: routing },
+          routing: routing === "auto" ? { mode: "auto", ...(modelId ? { modelId } : {}) }
+            : { mode: "manual", nodeId: routing, ...(modelId ? { modelId } : {}) },
           policy: { workspaceId, allowedTools, allowHostedJudgment, allowRulesFallback },
         } };
         setPending(submission);
@@ -151,6 +156,17 @@ function ChatWorkspace({ connection, onSettings, onDisconnect }: { connection: C
       void conversationQuery.refetch();
     } catch (error) { if (live.current) setActionError(errorText(error)); }
     finally { if (live.current) setCancelling(false); }
+  }
+
+  async function selectModel(nodeId: string, profileId: string) {
+    if (!connection) return;
+    const result = await apiRequest(connection, `/v1/nodes/${nodeId}/model`, modelSelectionResponseSchema, { method: "POST", body: { profileId } });
+    if (!live.current) return;
+    await queryClient.cancelQueries({ queryKey: [...prefix, "nodes"] });
+    queryClient.setQueryData([...prefix, "nodes"], (data: { nodes: FleetNode[] } | undefined) => data && ({
+      nodes: data.nodes.map(node => node.nodeId === nodeId ? { ...node, profiles: result.profiles } : node),
+    }));
+    void queryClient.invalidateQueries({ queryKey: [...prefix, "nodes"] });
   }
 
   function newConversation() {
@@ -200,7 +216,7 @@ function ChatWorkspace({ connection, onSettings, onDisconnect }: { connection: C
               event.preventDefault();
               if (!event.repeat) event.currentTarget.form?.requestSubmit();
             }} maxLength={32_000} placeholder="Describe a task, ask a question, or share an idea…" rows={3} disabled={submitting || !!pending} />
-            <div className="composer-toolbar"><label className="route-select"><Sparkles size={14} /><select aria-label="Routing mode or pinned node" value={routing} disabled={submitting || !!pending} onChange={(event) => setRouting(event.target.value)}><option value="auto">Automatic routing</option>{routing !== "auto" && !nodes.some((node) => node.nodeId === routing) && <option value={routing}>Pinned node · unavailable</option>}{nodes.map((node) => <option key={node.nodeId} value={node.nodeId}>{node.name} · {node.status}</option>)}</select></label>{active ? <Button type="button" variant="outline" size="sm" onClick={() => void cancelTask()} disabled={cancelling}><Square />{cancelling ? "Cancelling…" : "Cancel"}</Button> : <Button type="submit" size="icon" disabled={sendDisabled} aria-label="Send message" aria-describedby="send-status"><ArrowUp /></Button>}</div>
+            <div className="composer-toolbar"><div className="composer-routing"><label className="route-select model-select"><Cpu size={14} aria-hidden="true" /><select aria-label="Model" title="Route to nodes with this model active and ready" value={modelId} disabled={!connection || submitting || !!pending || !!nodesQuery.error} onChange={(event) => setModelId(event.target.value)}><option value="">Auto model</option>{modelId && !models.includes(modelId) && <option value={modelId}>{modelId} · unavailable</option>}{models.map(model => <option key={model} value={model}>{model}</option>)}</select></label><label className="route-select"><Sparkles size={14} /><select aria-label="Routing mode or pinned node" value={routing} disabled={submitting || !!pending} onChange={(event) => setRouting(event.target.value)}><option value="auto">Auto routing</option>{routing !== "auto" && !nodes.some((node) => node.nodeId === routing) && <option value={routing}>Pinned node · unavailable</option>}{nodes.map((node) => <option key={node.nodeId} value={node.nodeId}>{node.name} · {node.status}</option>)}</select></label></div>{active ? <Button type="button" variant="outline" size="sm" onClick={() => void cancelTask()} disabled={cancelling}><Square />{cancelling ? "Cancelling…" : "Cancel"}</Button> : <Button type="submit" size="icon" disabled={sendDisabled} aria-label="Send message" aria-describedby="send-status"><ArrowUp /></Button>}</div>
             <details className="task-options"><summary>Task permissions and routing policy</summary><label className="workspace-field">Workspace ID<input value={workspaceId} maxLength={128} disabled={submitting || !!pending} onChange={(event) => setWorkspaceId(event.target.value)} /></label><fieldset disabled={submitting || !!pending}><legend>Allowed tools for this task</legend><div className="tool-options">{enabledToolSchema.options.map((tool) => <label key={tool}><input type="checkbox" checked={allowedTools.includes(tool)} onChange={(event) => setAllowedTools((current) => event.target.checked ? [...current, tool] : current.filter((item) => item !== tool))} />{tool}</label>)}</div></fieldset><p className="permission-note">Tools are off by default. Bash can execute commands. Enabled tools use the configured working directory; they are not a sandbox.</p><label className="policy-check"><input type="checkbox" checked={allowHostedJudgment} disabled={submitting || !!pending} onChange={(event) => setAllowHostedJudgment(event.target.checked)} />Allow hosted Jev judgment to inspect routing context</label><label className="policy-check"><input type="checkbox" checked={allowRulesFallback} disabled={submitting || !!pending} onChange={(event) => setAllowRulesFallback(event.target.checked)} />Allow deterministic rules if Jev is unavailable or disabled</label></details>
           </form>
           {actionError && <p className="error-banner" role="alert">{actionError}</p>}
@@ -211,21 +227,62 @@ function ChatWorkspace({ connection, onSettings, onDisconnect }: { connection: C
     </main>
     <aside id="connected-nodes" className="fleet-panel" aria-labelledby="fleet-heading"><div className="fleet-heading"><h2 id="fleet-heading">Your nodes</h2><span className="count">{onlineNodes.length}/{nodes.length}</span>{connection && <button className="icon-refresh" aria-label="Refresh nodes" onClick={() => void nodesQuery.refetch()}><RefreshCw size={13} /></button>}</div><p className="fleet-description">The machines behind your agent.</p>
       {nodesQuery.error && <p className="error-banner" role="alert">{errorText(nodesQuery.error)} Cached nodes may be stale.</p>}
-      {connection && nodesQuery.isPending ? <p className="muted-note">Loading nodes…</p> : nodes.length ? <div className="node-list">{nodes.map((node) => <NodeCard key={node.nodeId} node={node} pinned={routing === node.nodeId} onPin={() => setRouting(node.nodeId)} disabled={submitting || !!pending} />)}</div> : <div className="empty-fleet"><div className="empty-icon"><Network size={28} /></div><h3>{connection ? "No nodes registered" : "No backend connected"}</h3><p>{connection ? "Start a node agent on a machine to make its models and enabled tools available here." : "Connect your backend to discover your machines."}</p><span className="waiting"><Radio size={13} />{connection ? "Checking every 3 seconds" : "Connection required"}</span></div>}
-      <div className="routing-card"><span className="routing-icon"><Sparkles size={17} /></span><h3>{routing === "auto" ? "Automatic routing" : "Explicit node routing"}</h3><p>{routing === "auto" ? "Jev or permitted rules select among eligible machines." : "Tasks stay pinned to this node. An unavailable node will not silently be replaced."}</p><div><Check size={13} /> One continuous conversation</div><div><Check size={13} /> Permissions checked before routing</div></div><div className="fleet-footer"><ShieldCheck size={15} /><span>Only explicitly enabled tools<br />are available to your agent.</span></div>
+      {connection && nodesQuery.isPending ? <p className="muted-note">Loading nodes…</p> : nodes.length ? <div className="node-list">{nodes.map((node) => <NodeCard key={node.nodeId} node={node} pinned={routing === node.nodeId} onPin={() => setRouting(node.nodeId)} onSelectModel={(profileId) => selectModel(node.nodeId, profileId)} disabled={submitting || !!pending || !!nodesQuery.error} />)}</div> : <div className="empty-fleet"><div className="empty-icon"><Network size={28} /></div><h3>{connection ? "No nodes registered" : "No backend connected"}</h3><p>{connection ? "Start a node agent on a machine to make its models and enabled tools available here." : "Connect your backend to discover your machines."}</p><span className="waiting"><Radio size={13} />{connection ? "Checking every 3 seconds" : "Connection required"}</span></div>}
+      <div className="routing-card"><span className="routing-icon"><Sparkles size={17} /></span><h3>{routing === "auto" ? "Auto routing" : "Explicit node routing"}</h3><p>{routing === "auto" ? "Jev or permitted rules select among eligible machines." : "Tasks stay pinned to this node. An unavailable node will not silently be replaced."}</p><div><Check size={13} /> One continuous conversation</div><div><Check size={13} /> Permissions checked before routing</div></div><div className="fleet-footer"><ShieldCheck size={15} /><span>Only explicitly enabled tools<br />are available to your agent.</span></div>
     </aside>
   </div>;
 }
 
-function NodeCard({ node, pinned, onPin, disabled }: { node: FleetNode; pinned: boolean; onPin: () => void; disabled: boolean }) {
+function NodeCard({ node, pinned, onPin, onSelectModel, disabled }: {
+  node: FleetNode; pinned: boolean; onPin: () => void;
+  onSelectModel: (profileId: string) => Promise<void>; disabled: boolean;
+}) {
+  const [switching, setSwitching] = useState<string | null>(null);
+  const [switchError, setSwitchError] = useState("");
+  const switchLock = useRef(false);
   const gb = (bytes: number) => `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
-  return <article className={`node-card ${pinned ? "is-pinned" : ""}`}><div className="node-title"><Cpu size={15} /><h3>{node.name}</h3><span className={`node-status ${node.status}`}>{node.status}</span></div><p>{node.hardware.platform} · {node.hardware.arch} · {node.hardware.cpuCores} cores</p><p>{gb(node.hardware.availableMemoryBytes)} free / {gb(node.hardware.memoryBytes)}</p>{node.hardware.gpus.map((gpu, index) => <p key={`${gpu.name}-${index}`}>{gpu.name}{gpu.memoryBytes ? ` · ${gb(gpu.memoryBytes)}` : ""}</p>)}<div className="node-models">{node.profiles.length ? node.profiles.map((profile) => <ModelRow key={profile.id} profile={profile} />) : <p>No models discovered yet. Start Ollama or configure a runtime.</p>}</div><p className="node-tools">Tools: {node.enabledTools.join(", ") || "none"}</p><p className="node-tools">Workspaces: {node.workspaceIds.join(", ")}</p><p className="node-tools">Active tasks: {node.activeAttempts.length}</p><Button type="button" variant={pinned ? "default" : "outline"} size="sm" disabled={disabled} onClick={onPin}>{pinned ? "Pinned for next task" : "Route to this node"}</Button></article>;
+  const selected = node.profiles.find(profile => profile.discovery?.selected);
+  const warming = node.profiles.some(profile => profile.state === "starting");
+  const models = node.profiles.filter(profile => profile.discovery);
+  const activationBlockedReason = disabled ? "Model activation is temporarily unavailable."
+    : switching || warming ? "Wait for model preparation to finish."
+    : node.status !== "online" ? "Bring this node online to activate models."
+    : node.activeAttempts.length > 0 ? "Wait for active or unresolved tasks to finish." : undefined;
+  async function activateModel(profile: ModelProfile) {
+    if (activationBlockedReason || !profile.discovery?.selectable || profile.id === selected?.id || switchLock.current) return;
+    switchLock.current = true; setSwitching(profile.id); setSwitchError("");
+    try { await onSelectModel(profile.id); }
+    catch (error) { setSwitchError(errorText(error)); }
+    finally { switchLock.current = false; setSwitching(null); }
+  }
+  return <article className={`node-card ${pinned ? "is-pinned" : ""}`}>
+    <div className="node-title"><Cpu size={15} /><h3>{node.name}</h3><span className={`node-status ${node.status}`}>{node.status}</span></div>
+    <p>{node.hardware.platform} · {node.hardware.arch} · {node.hardware.cpuCores} cores</p>
+    <p>{gb(node.hardware.availableMemoryBytes)} free / {gb(node.hardware.memoryBytes)}</p>
+    {node.hardware.gpus.map((gpu, index) => <p key={`${gpu.name}-${index}`}>{gpu.name}{gpu.memoryBytes ? ` · ${gb(gpu.memoryBytes)}` : ""}</p>)}
+    <div className="node-models" aria-busy={!!switching || warming}>{node.profiles.length ? node.profiles.map((profile) => <ModelRow key={profile.id} profile={profile} onActivate={() => void activateModel(profile)} activationBlockedReason={activationBlockedReason} activating={switching === profile.id || profile.state === "starting"} />) : <p>No models discovered yet. Start Ollama or configure a runtime.</p>}</div>
+    {models.length > 0 && <div className="model-controls">
+      <p role="status">{node.status !== "online" ? "Bring this node online to activate models." : node.activeAttempts.length ? "Wait for active or unresolved tasks to finish." : switching || warming ? "The node will be ready after model preparation finishes." : "Activate any downloaded model with its power button. The speed minimum applies only to automatic selection. Your choice is saved on this node."}</p>
+      {switchError && <p className="error-banner model-activation-error" role="alert">{switchError}</p>}
+    </div>}
+    <p className="node-tools">Tools: {node.enabledTools.join(", ") || "none"}</p>
+    <p className="node-tools">Workspaces: {node.workspaceIds.join(", ")}</p>
+    <p className="node-tools">Active tasks: {node.activeAttempts.length}</p>
+    <Button type="button" variant={pinned ? "default" : "outline"} size="sm" disabled={disabled} onClick={onPin}>{pinned ? "Pinned for next task" : "Route to this node"}</Button>
+  </article>;
 }
 
-function ModelRow({ profile }: { profile: ModelProfile }) {
+function ModelRow({ profile, onActivate, activationBlockedReason, activating }: {
+  profile: ModelProfile; onActivate: () => void; activationBlockedReason?: string; activating: boolean;
+}) {
   const discovery = profile.discovery;
+  const activationLabel = `${activating ? "Preparing" : "Activate"} ${profile.modelId}`;
   return <div className="model-row">
-    <div><span title={profile.modelId}>{profile.modelId}</span><strong className={profile.state}>{discovery?.selected ? `selected · ${profile.state}` : profile.state === 'starting' && discovery ? 'benchmarking' : profile.state}</strong></div>
+    <div><span title={profile.modelId}>{profile.modelId}</span><strong className={profile.state}>{discovery?.selected ? `active · ${profile.state}` : discovery?.selectable ? 'available' : profile.state}</strong>
+      {discovery && !discovery.selected && <Button type="button" variant="outline" size="icon" className="model-activate" aria-label={activationLabel} title={activating ? activationLabel : activationBlockedReason ?? (!discovery.selectable ? "This model is not downloaded locally." : activationLabel)} disabled={!!activationBlockedReason || !discovery.selectable || activating} onClick={onActivate}>
+        {activating ? <LoaderCircle aria-hidden="true" className="motion-safe:animate-spin" /> : <Power aria-hidden="true" />}
+      </Button>}
+    </div>
     {discovery && <p>
       {discovery.parameterCount !== undefined && `${(discovery.parameterCount / 1e9).toFixed(1)}B · `}
       {discovery.tokensPerSecond !== undefined && <span title={discovery.measuredAt ? `Measured ${new Date(discovery.measuredAt).toLocaleString()}; slower of two generation samples` : undefined}>{discovery.tokensPerSecond.toFixed(1)} tokens/s · </span>}

@@ -8,7 +8,7 @@ import { loadRuntime, RuntimeSupervisor, validateRuntimeHardware } from './runti
 import { OllamaDiscovery } from './ollama.js';
 import { PiExecutor } from './pi-session.js';
 import { Enrollment } from './enrollment.js';
-import { Executions } from './executions.js';
+import { Executions, RequestError } from './executions.js';
 import { createNodeServer } from './server.js';
 async function acquire(stateDir: string, bootId: string) {
   const path = join(stateDir, 'owner.lock');
@@ -55,7 +55,13 @@ export async function startNode(config: NodeConfig = readConfig()) {
     enrollment.onLeaseLost = () => executions!.abort('lease_lost');
     if (runtime) runtime.onUnavailable = () => executions!.abort('runtime_unavailable');
     if (discovery) discovery.onUnavailable = () => executions!.abort('runtime_unavailable');
-    const { server, drain } = createNodeServer(config, { executions, hardware, nodeId, bootId, profiles, registered: () => Boolean(enrollment!.current()), discoveryStatus: () => discovery?.status });
+    const { server, drain } = createNodeServer(config, { executions, hardware, nodeId, bootId, profiles, registered: () => Boolean(enrollment!.current()), discoveryStatus: () => discovery?.status,
+      selectModel: discovery ? input => {
+        const lease = enrollment!.current();
+        if (!lease || input.bootId !== bootId || input.generation !== lease.generation) throw new RequestError(409, 'stale_lease', 'The node lease changed; refresh and retry.');
+        discovery!.select(input.profileId);
+      } : undefined,
+    });
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(config.port, config.host, () => { server.off('error', reject); resolve(); }); });
     const starting = Promise.all([enrollment.start(), runtime?.start(), discovery?.start()]);
     let closing = false;

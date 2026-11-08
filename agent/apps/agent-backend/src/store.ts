@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
 import {
-  canonicalJson, PROTOCOL_VERSION, executionRequestSchema, fleetNodeSchema,
+  canonicalJson, PROTOCOL_VERSION, executionRequestSchema, fleetNodeSchema, modelSelectionResponseSchema, apiErrorSchema,
   type Registration, type Heartbeat, type Lease, type FleetNode, type Conversation,
   type Message, type Task, type Decision, type SubmitMessage, type ExecutionRequest,
   type ExecutionSnapshot, type ConversationEvent,
@@ -11,6 +11,7 @@ import { origin } from './config.js';
 import { ApiError, missing } from './errors.js';
 import { migration } from './migrations.js';
 import { eligibleCandidates, selectCandidate } from './routing.js';
+import { limitedText } from './http-client.js';
 
 type Db = Pool | PoolClient;
 export interface PendingAttempt {
@@ -79,6 +80,39 @@ export class Store {
       const node = fleetNodeSchema.parse({ ...registration, status: row.lease_expires.getTime() <= Date.now() ? 'offline' : row.draining ? 'draining' : 'online',
         lastSeenAt: row.last_seen.toISOString(), leaseExpiresAt: row.lease_expires.toISOString(), activeAttempts: row.active_attempts });
       return { node, reserved: Number(row.reserved) };
+    });
+  }
+  async selectModel(nodeId: string, profileId: string, fetcher: typeof fetch = fetch) {
+    return this.transaction(async db => {
+      // Share the placement lock with submit so a queued attempt cannot race a switch.
+      const row = (await db.query('SELECT * FROM nodes WHERE id=$1 FOR UPDATE', [nodeId])).rows[0];
+      if (!row) throw missing();
+      const current = (await this.nodes(db)).find(n => n.node.nodeId === nodeId)!;
+      if (current.node.status !== 'online') throw new ApiError(409, 'NODE_UNAVAILABLE', 'The node must be online to switch models.');
+      if (current.reserved || current.node.activeAttempts.length) throw new ApiError(409, 'NODE_BUSY', 'Wait for active or unresolved tasks to finish before switching models.');
+      if (!current.node.profiles.some(p => p.id === profileId && p.discovery?.selectable)) throw new ApiError(409, 'MODEL_NOT_SELECTABLE', 'This model is not currently available for selection. Refresh the node status.');
+      const registration = row.registration as Registration;
+      if (!this.config.nodeOrigins.has(registration.endpoint)) throw new ApiError(403, 'ENDPOINT_NOT_ALLOWED', 'The node endpoint is no longer allowed.');
+      let result;
+      try {
+        const response = await fetcher(`${registration.endpoint}/v1/node/model`, {
+          method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5000),
+          headers: { authorization: `Bearer ${this.config.nodeToken}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ profileId, bootId: row.boot_id, generation: row.generation }),
+        });
+        const data: unknown = JSON.parse(await limitedText(response, 1_000_000));
+        if (!response.ok) {
+          const error = apiErrorSchema.safeParse(data);
+          throw new ApiError(response.status === 409 ? 409 : 502, 'MODEL_SWITCH_REJECTED', error.success ? error.data.error.message : 'The node rejected the model switch.');
+        }
+        result = modelSelectionResponseSchema.parse(data);
+      } catch (error) {
+        if (error instanceof ApiError) throw error;
+        throw new ApiError(502, 'NODE_CONNECTION_FAILED', 'Could not confirm the model switch. Refresh the node status before retrying.');
+      }
+      registration.profiles = result.profiles;
+      await db.query('UPDATE nodes SET registration=$2 WHERE id=$1', [nodeId, JSON.stringify(registration)]);
+      return result;
     });
   }
   async createConversation(): Promise<Conversation> {

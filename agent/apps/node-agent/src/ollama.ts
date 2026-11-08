@@ -4,6 +4,7 @@ import type { Hardware, ModelProfile } from '@agent/contracts';
 import type { OllamaConfig } from './config.js';
 import { durableWrite, readJson } from './storage.js';
 import { limitedJson, parseRuntimeManifest, RuntimeSupervisor, type RuntimeManifest } from './runtime.js';
+import { RequestError } from './executions.js';
 
 interface Tag {
   name: string; digest: string; size: number; remote_model?: string; remote_host?: string;
@@ -14,7 +15,7 @@ interface Details {
   details?: Tag['details']; model_info?: Record<string, unknown>;
 }
 interface Measurement { tokensPerSecond: number; measuredAt: string; }
-interface Candidate { tag: Tag; profile: ModelProfile; eligible: boolean; }
+interface Candidate { tag: Tag; profile: ModelProfile; downloaded: boolean; eligible: boolean; automaticReason?: string; }
 const BENCHMARK_REVISION = 1;
 const SAMPLE_TOKENS = 128;
 const MIN_SAMPLE_TOKENS = 64;
@@ -27,11 +28,6 @@ export function parameterCount(details: Details, name: string): number | undefin
   const match = text.match(/^(\d+(?:\.\d+)?)\s*([BMT])$/i) ?? name.match(/[:_-](\d+(?:\.\d+)?)([bmt])(?:[-_:]|$)/i);
   const count = match ? Number(match[1]) * ({ b: 1e9, m: 1e6, t: 1e12 }[match[2]!.toLowerCase()] ?? 1) : 0;
   return Number.isFinite(count) && count > 0 ? count : undefined;
-}
-
-export function supportedFamily(name: string, details: Details): boolean {
-  const families = [details.details?.family, ...(details.details?.families ?? []), details.model_info?.['general.architecture']];
-  return families.some(f => typeof f === 'string' && /^(?:qwen|gemma[-_]?4)/i.test(f)) || /(?:^|\/)(?:qwen[\d._-]*|gemma[-_]?4)(?:[:._-]|$)/i.test(name);
 }
 
 export function measuredSpeed(payload: unknown): number {
@@ -63,6 +59,7 @@ export class OllamaDiscovery {
   private fingerprint = '';
   private lastInventory = '';
   private refreshAt = 0;
+  private preferredProfile?: string;
   onUnavailable: () => void = () => {};
   status = 'Waiting for Ollama discovery';
   constructor(private readonly config: OllamaConfig, private readonly hardware: Hardware, private readonly nodeId: string, private readonly stateDir: string, private readonly busy: () => boolean, private readonly fetcher: typeof fetch = fetch) {}
@@ -72,8 +69,66 @@ export class OllamaDiscovery {
     return this.candidates.map(({ profile }) => {
       const selected = this.runtime?.manifest.profileId === profile.id;
       return { ...profile, state: selected && !this.selecting ? this.runtime!.profile().state : profile.state,
-        discovery: { ...profile.discovery!, selected: selected && !this.selecting } };
+        discovery: { ...profile.discovery!, selected: selected && !this.selecting,
+          selectable: !this.stopped && !this.selecting && this.canSelect(profile.id) } };
     });
+  }
+  private canSelect(profileId: string) {
+    // Manual activation only requires locally downloaded weights. Speed, metadata and
+    // capability checks determine automatic selection; warmup validates manual activation.
+    return Boolean(this.candidates.find(c => c.profile.id === profileId)?.downloaded);
+  }
+  /** Reserve the runtime synchronously before returning an asynchronous warmup acknowledgement. */
+  select(profileId: string) {
+    if (this.stopped || this.pending || this.selecting || this.busy()) throw new RequestError(409, 'node_busy', 'Wait for model discovery and active or unresolved tasks to finish.');
+    if (!this.canSelect(profileId)) throw new RequestError(409, 'model_not_selectable', 'This model is not downloaded locally. Refresh the node status.');
+    if (this.readyProfile() === profileId) return;
+    const candidate = this.candidates.find(c => c.profile.id === profileId)!;
+    const previous = this.candidates.find(c => c.profile.id === this.runtime?.manifest.profileId);
+    this.selecting = true;
+    candidate.profile.state = 'starting';
+    candidate.profile.discovery!.reason = 'Warming model';
+    this.status = `Switching to ${candidate.tag.name}`;
+    clearTimeout(this.timer);
+    this.pending = this.switchModel(candidate, previous).catch(() => {
+      candidate.profile.state = 'failed'; candidate.profile.discovery!.reason = 'Model switch failed; retry after discovery refresh';
+      this.status = 'Model switch failed; retry or select another model';
+    }).finally(() => {
+      this.selecting = false; this.pending = undefined;
+      if (!this.stopped) this.timer = setTimeout(() => void this.refresh(), this.config.refreshIntervalMs);
+    });
+  }
+  private async activate(candidate: Candidate, reason: string): Promise<boolean> {
+    if (this.stopped) return false;
+    const manifest = parseRuntimeManifest({ kind: 'external', profileId: candidate.profile.id, modelId: candidate.tag.name,
+      endpoint: `${this.config.url}/v1`, contextWindow: candidate.profile.contextWindow, maxTokens: Math.min(2048, Math.floor(candidate.profile.contextWindow / 2)), ollama: true });
+    this.runtime = new RuntimeSupervisor(manifest, this.nodeId, this.stateDir);
+    this.runtime.onUnavailable = () => this.onUnavailable();
+    await this.runtime.start();
+    candidate.profile.state = 'stopped';
+    if (this.stopped) return false;
+    if (this.runtime.profile().state === 'ready') {
+      candidate.profile.discovery!.reason = reason;
+      this.status = `Active model: ${candidate.tag.name}`;
+      return true;
+    }
+    await this.runtime.close(); this.runtime = undefined;
+    candidate.profile.state = 'failed'; candidate.profile.discovery!.reason = 'OpenAI-compatible endpoint failed warmup';
+    return false;
+  }
+  private async switchModel(candidate: Candidate, previous?: Candidate) {
+    await durableWrite(join(this.stateDir, 'ollama-selection.json'), { profileId: candidate.profile.id });
+    this.preferredProfile = candidate.profile.id;
+    await this.runtime?.close(); this.runtime = undefined;
+    if (previous) {
+      previous.profile.discovery!.reason = previous.automaticReason ?? 'Downloaded; available for manual activation';
+      await this.request('/api/generate', { model: previous.tag.name, keep_alive: 0 }).catch(() => {});
+    }
+    if (this.stopped) return;
+    if (await this.activate(candidate, 'Active model chosen by operator')) return;
+    if (!this.stopped && previous && await this.activate(previous, 'Restored after model switch failed')) {
+      this.status = `Could not warm ${candidate.tag.name}; restored ${previous.tag.name}`;
+    } else if (!this.stopped) this.status = `Could not warm ${candidate.tag.name}; select another model`;
   }
   private async request(path: string, body?: unknown, timeout = 5000): Promise<any> {
     const response = await this.fetcher(`${this.config.url}${path}`, {
@@ -114,6 +169,8 @@ export class OllamaDiscovery {
   async start() {
     const stored = await readJson(join(this.stateDir, 'ollama-benchmarks.json')).catch(() => undefined);
     if (stored && typeof stored === 'object' && !Array.isArray(stored)) this.cache = stored as Record<string, Measurement>;
+    const selection = await readJson(join(this.stateDir, 'ollama-selection.json')).catch(() => undefined) as { profileId?: unknown } | undefined;
+    if (typeof selection?.profileId === 'string') this.preferredProfile = selection.profileId;
     await this.refresh();
   }
   refresh(): Promise<void> {
@@ -142,7 +199,7 @@ export class OllamaDiscovery {
       this.selecting = true;
       this.status = 'Inspecting and benchmarking installed Ollama models';
       await this.runtime?.close(); this.runtime = undefined;
-      this.candidates = inventory.map(tag => ({ tag, eligible: false, profile: {
+      this.candidates = inventory.map(tag => ({ tag, downloaded: tag.size > 0 && !tag.remote_model && !tag.remote_host, eligible: false, profile: {
         id: `ollama-${createHash('sha256').update(tag.name).digest('hex').slice(0, 24)}`,
         modelId: tag.name, runtime: 'external', state: 'stopped', contextWindow: this.config.contextWindow, concurrency: 1,
         discovery: { source: 'ollama', selected: false, reason: 'Inspecting installed model' },
@@ -151,48 +208,42 @@ export class OllamaDiscovery {
         if (this.stopped) return;
         try {
           const details: Details = await this.request('/api/show', { model: c.tag.name });
+          c.downloaded = c.downloaded && !details.remote_model && !details.remote_host;
           c.profile.discovery!.parameterCount = parameterCount(details, c.tag.name);
           const requestedContext = Number(details.parameters?.match(/(?:^|\n)\s*num_ctx\s+(\d+)/)?.[1] ?? 4096);
           const context = Number.isSafeInteger(requestedContext) && requestedContext >= 256 ? requestedContext : 4096;
           const architecture = details.model_info?.['general.architecture'];
           const maxContext = typeof architecture === 'string' ? details.model_info?.[`${architecture}.context_length`] : undefined;
           c.profile.contextWindow = Math.min(this.config.contextWindow, context, typeof maxContext === 'number' && Number.isSafeInteger(maxContext) && maxContext >= 256 ? maxContext : context);
-          const reason = c.tag.remote_model || c.tag.remote_host || details.remote_model || details.remote_host || /(?:^|[:-])cloud(?:$|[:-])/i.test(c.tag.name) ? 'Cloud models are excluded from local selection'
-            : !supportedFamily(c.tag.name, details) ? 'Automatic selection supports Gemma 4 and Qwen'
-            : !Array.isArray(details.capabilities) || !details.capabilities.includes('completion') || !details.capabilities.includes('tools') ? 'Model must support chat completion and tools'
-            : !c.profile.discovery!.parameterCount ? 'Parameter count is unknown'
-            : c.tag.size > this.hardware.memoryBytes * 0.8 ? 'Model weights exceed 80% of machine memory'
+          const reason = !c.downloaded ? 'Model is not downloaded locally'
+            : !Array.isArray(details.capabilities) || !details.capabilities.includes('completion') || !details.capabilities.includes('tools') ? 'Automatic selection requires chat completion and tools'
+            : !c.profile.discovery!.parameterCount ? 'Automatic selection requires a known parameter count'
+            : c.tag.size > this.hardware.memoryBytes * 0.8 ? 'Model weights exceed the automatic selection memory limit'
             : undefined;
           c.eligible = !reason;
-          c.profile.discovery!.reason = reason ?? 'Waiting for speed benchmark';
-        } catch { c.profile.state = 'failed'; c.profile.discovery!.reason = 'Could not inspect model metadata'; }
+          c.profile.discovery!.reason = c.automaticReason = reason ?? 'Waiting for automatic selection speed benchmark';
+        } catch { c.profile.state = 'failed'; c.profile.discovery!.reason = c.automaticReason = 'Could not inspect model metadata for automatic selection'; }
       }
       for (const c of rankCandidates(this.candidates.filter(c => c.eligible), this.config.modelPriority)) {
         if (this.stopped) return;
         try {
           const result = await this.benchmark(c);
           Object.assign(c.profile.discovery!, result);
-          c.profile.discovery!.reason = result.tokensPerSecond >= this.config.minTokensPerSecond ? 'Speed requirement met' : `Below ${this.config.minTokensPerSecond} tokens/s minimum`;
-        } catch { c.eligible = false; c.profile.state = 'failed'; c.profile.discovery!.reason = 'Benchmark failed, timed out, or generated too few tokens'; }
+          c.profile.discovery!.reason = c.automaticReason = result.tokensPerSecond >= this.config.minTokensPerSecond ? 'Automatic selection speed requirement met' : `Below ${this.config.minTokensPerSecond} tokens/s automatic selection minimum`;
+        } catch { c.eligible = false; c.profile.state = 'failed'; c.profile.discovery!.reason = c.automaticReason = 'Automatic selection benchmark failed, timed out, or generated too few tokens'; }
       }
       if (this.stopped) return;
-      for (const selected of rankCandidates(this.candidates.filter(c => c.eligible && (c.profile.discovery?.tokensPerSecond ?? 0) >= this.config.minTokensPerSecond), this.config.modelPriority)) {
+      const passing = rankCandidates(this.candidates.filter(c => c.eligible && (c.profile.discovery?.tokensPerSecond ?? 0) >= this.config.minTokensPerSecond), this.config.modelPriority);
+      // A saved manual choice stays active even when it is ineligible for automatic selection.
+      const preferred = this.candidates.find(c => c.downloaded && c.profile.id === this.preferredProfile);
+      let selectedModel: string | undefined;
+      for (const selected of preferred ? [preferred, ...passing.filter(c => c !== preferred)] : passing) {
         if (this.stopped) return;
-        const manifest = parseRuntimeManifest({ kind: 'external', profileId: selected.profile.id, modelId: selected.tag.name,
-          endpoint: `${this.config.url}/v1`, contextWindow: selected.profile.contextWindow, maxTokens: Math.min(2048, Math.floor(selected.profile.contextWindow / 2)), ollama: true });
-        this.runtime = new RuntimeSupervisor(manifest, this.nodeId, this.stateDir);
-        this.runtime.onUnavailable = () => this.onUnavailable();
-        await this.runtime.start();
-        if (this.runtime.profile().state === 'ready') {
-          selected.profile.discovery!.reason = 'Selected: highest ranked model meeting the speed requirement';
-          this.status = `Selected ${selected.tag.name}`; break;
-        }
-        await this.runtime.close(); this.runtime = undefined;
-        selected.profile.state = 'failed'; selected.profile.discovery!.reason = 'OpenAI-compatible endpoint failed warmup';
+        if (await this.activate(selected, selected === preferred ? 'Active model chosen by operator' : 'Active: highest ranked model meeting the speed requirement')) { selectedModel = selected.tag.name; break; }
       }
-      if (!this.runtime) this.status = 'No installed Gemma 4 or Qwen model meets the speed requirement';
+      if (!selectedModel) this.status = 'No downloaded model is ready for automatic selection; activate a model manually';
       this.lastInventory = signature; this.refreshAt = Date.now() + this.config.benchmarkTtlMs;
-      console.info(JSON.stringify({ event: 'ollama_selection', status: this.status, selectedModel: this.runtime?.manifest.modelId }));
+      console.info(JSON.stringify({ event: 'ollama_selection', status: this.status, selectedModel }));
     } catch {
       this.status = 'Ollama unavailable or returned an invalid inventory; retrying';
       // An inaccessible inventory is not a successful empty discovery.

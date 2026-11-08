@@ -862,6 +862,9 @@
                 "selected": {
                   "type": "boolean"
                 },
+                "selectable": {
+                  "type": "boolean"
+                },
                 "reason": {
                   "type": "string",
                   "maxLength": 256
@@ -1126,6 +1129,9 @@
                 "selected": {
                   "type": "boolean"
                 },
+                "selectable": {
+                  "type": "boolean"
+                },
                 "reason": {
                   "type": "string",
                   "maxLength": 256
@@ -1321,6 +1327,9 @@
           "selected": {
             "type": "boolean"
           },
+          "selectable": {
+            "type": "boolean"
+          },
           "reason": {
             "type": "string",
             "maxLength": 256
@@ -1354,6 +1363,148 @@
       "contextWindow",
       "concurrency"
     ]
+  },
+  "modelSelectionResponseSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "profiles": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "modelId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "runtime": {
+              "type": "string",
+              "enum": [
+                "native",
+                "docker",
+                "external"
+              ]
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "stopped",
+                "starting",
+                "ready",
+                "failed"
+              ]
+            },
+            "contextWindow": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "concurrency": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "discovery": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "const": "ollama"
+                },
+                "selected": {
+                  "type": "boolean"
+                },
+                "selectable": {
+                  "type": "boolean"
+                },
+                "reason": {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                "parameterCount": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "tokensPerSecond": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "measuredAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                }
+              },
+              "required": [
+                "source",
+                "selected",
+                "reason"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "modelId",
+            "runtime",
+            "state",
+            "contextWindow",
+            "concurrency"
+          ]
+        }
+      }
+    },
+    "required": [
+      "profiles"
+    ],
+    "additionalProperties": false
+  },
+  "modelSelectionSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "profileId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "required": [
+      "profileId"
+    ],
+    "additionalProperties": false
+  },
+  "nodeModelSelectionSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "profileId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "bootId": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      },
+      "generation": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      }
+    },
+    "required": [
+      "profileId",
+      "bootId",
+      "generation"
+    ],
+    "additionalProperties": false
   },
   "nodesResponseSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1556,6 +1707,9 @@
                         "const": "ollama"
                       },
                       "selected": {
+                        "type": "boolean"
+                      },
+                      "selectable": {
                         "type": "boolean"
                       },
                       "reason": {
@@ -1844,6 +1998,9 @@
                 "selected": {
                   "type": "boolean"
                 },
+                "selectable": {
+                  "type": "boolean"
+                },
                 "reason": {
                   "type": "string",
                   "maxLength": 256
@@ -1902,6 +2059,11 @@
           "mode": {
             "type": "string",
             "const": "auto"
+          },
+          "modelId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
           }
         },
         "required": [
@@ -1919,6 +2081,11 @@
           "nodeId": {
             "type": "string",
             "minLength": 1
+          },
+          "modelId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
           }
         },
         "required": [
@@ -1958,6 +2125,11 @@
               "mode": {
                 "type": "string",
                 "const": "auto"
+              },
+              "modelId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
               }
             },
             "required": [
@@ -1975,6 +2147,11 @@
               "nodeId": {
                 "type": "string",
                 "minLength": 1
+              },
+              "modelId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
               }
             },
             "required": [

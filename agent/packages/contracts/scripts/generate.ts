@@ -20,6 +20,8 @@ const document = {
   openapi: '3.1.0', info: { title: 'Curilo Agent protocol', version: contracts.PROTOCOL_VERSION },
   paths: {
     '/v1/nodes': { get: operation(null, 'nodesResponseSchema') },
+    '/v1/nodes/{nodeId}/model': { parameters: [parameter('nodeId')], post: operation('modelSelectionSchema', 'modelSelectionResponseSchema', false, '202') },
+    '/v1/node/model': { post: operation('nodeModelSelectionSchema', 'modelSelectionResponseSchema', true, '202') },
     '/v1/nodes/register': { post: operation('registrationSchema', 'leaseSchema', true) },
     '/v1/nodes/{nodeId}/heartbeats': { parameters: [parameter('nodeId')], post: operation('heartbeatSchema', 'leaseSchema', true) },
     '/v1/conversations': { post: operation(null, 'conversationSchema', false, '201') },

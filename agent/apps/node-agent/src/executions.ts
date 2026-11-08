@@ -21,6 +21,7 @@ export class Executions {
   private readonly serial = new Serial();
   private active?: { id: string; controller: AbortController; done: Promise<void>; reason?: 'cancelled' | 'deadline' | 'lease_lost' | 'runtime_unavailable' | 'shutdown' | 'side_effect_unknown' };
   private draining = false;
+  private admitting?: string;
   constructor(private readonly config: NodeConfig, readonly nodeId: string, readonly bootId: string, private readonly getLease: () => Lease | undefined, private readonly getReadyProfile: () => string | undefined, private readonly executor: Executor) {}
   private path(id: string) { return join(this.config.stateDir, 'executions', `${id}.json`); }
   private async save(record: JournalRecord) { await durableWrite(this.path(record.request.attemptId), record); }
@@ -43,7 +44,7 @@ export class Executions {
     return lease && lease.nodeId === this.nodeId && lease.bootId === this.bootId && Date.parse(lease.expiresAt) > Date.now() ? lease : undefined;
   }
   ready() { return !this.draining && !this.active && Boolean(this.usableLease()) && Boolean(this.getReadyProfile()) && ![...this.records.values()].some(record => record.snapshot.status === 'unknown'); }
-  activeIds() { return [...new Set([...(this.active ? [this.active.id] : []), ...[...this.records.values()].filter(record => record.snapshot.status === 'unknown').map(record => record.request.attemptId)])]; }
+  activeIds() { return [...new Set([...(this.admitting ? [this.admitting] : []), ...(this.active ? [this.active.id] : []), ...[...this.records.values()].filter(record => record.snapshot.status === 'unknown').map(record => record.request.attemptId)])]; }
   private validate(request: ExecutionRequest) {
     const lease = this.usableLease();
     if (!lease || request.nodeId !== this.nodeId || request.bootId !== this.bootId || request.generation !== lease.generation) throw new RequestError(409, 'stale_lease');
@@ -67,7 +68,9 @@ export class Executions {
       if (!this.ready()) throw new RequestError(409, this.draining ? 'draining' : 'capacity_unavailable');
       const snapshot: ExecutionSnapshot = { attemptId: request.attemptId, inputDigest, status: 'queued', output: '', error: null, sequence: 0, updatedAt: new Date().toISOString() };
       const record: JournalRecord = { request, snapshot, tools: {} };
-      await this.save(record); // Before acceptance, and before executor can make a side effect.
+      // Reserve before disk I/O so model changes cannot race durable admission.
+      this.admitting = request.attemptId;
+      try { await this.save(record); } finally { this.admitting = undefined; }
       this.records.set(request.attemptId, record);
       let begin!: () => void;
       const gate = new Promise<void>(resolve => { begin = resolve; });

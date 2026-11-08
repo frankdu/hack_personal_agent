@@ -65,3 +65,15 @@ h1 { margin: 24px 0 20px; font-family: Georgia, "Times New Roman", serif; font-w
 .node-models > .model-row { display: block; margin: 9px 0; }
 .model-row > div { display: flex; align-items: center; gap: 8px; }
 .model-row > p { margin: 3px 0; line-height: 1.5; }
+
+.model-row > div > span { flex: 1; }
+.model-row > div > strong { flex-shrink: 0; }
+.node-card .model-activate { width: 28px; height: 28px; flex: 0 0 28px; margin: 0; padding: 0; color: #627c52; }
+.node-card .model-activation-error { color: #8a523b; padding: 8px; }
+
+.composer-toolbar { gap: 10px; align-items: flex-end; }
+.composer-routing { display: flex; flex-wrap: wrap; gap: 7px; min-width: 0; }
+.composer-routing .route-select { min-width: 0; max-width: 100%; }
+.composer-routing .route-select > svg { flex-shrink: 0; }
+.composer-routing select { min-width: 0; }
+.composer-toolbar > button { flex-shrink: 0; }

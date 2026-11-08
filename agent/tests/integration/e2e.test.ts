@@ -36,6 +36,7 @@ test('PostgreSQL → routing audit → node journal → real Pi → local script
     if (req.url !== '/v1/chat/completions') { res.writeHead(404); res.end(); return; }
     let raw = ''; for await (const chunk of req) raw += chunk;
     const body = JSON.parse(raw);
+    assert.equal(body.model, 'test-gemma');
     if (!body.stream) { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ id: 'warm', choices: [{ message: { role: 'assistant', content: 'OK' }, finish_reason: 'stop' }] })); return; }
     modelCalls++;
     const toolResult = body.messages.some((m: any) => m.role === 'tool' && JSON.stringify(m.content).includes('fixture-secret-content'));
@@ -82,7 +83,8 @@ test('PostgreSQL → routing audit → node journal → real Pi → local script
   });
   assert.equal(fleet[0]!.name, 'Integration node');
   const conv = conversationSchema.parse((await api('/v1/conversations', {})).body);
-  const body = { protocolVersion: '1', text: 'Hello', expectedRevision: conv.revision, routing: { mode: 'auto' }, policy: { workspaceId: 'default', allowedTools: [], allowHostedJudgment: false, allowRulesFallback: true } };
+  const body = { protocolVersion: '1', text: 'Hello', expectedRevision: conv.revision, routing: { mode: 'auto', modelId: 'test-gemma' }, policy: { workspaceId: 'default', allowedTools: [], allowHostedJudgment: false, allowRulesFallback: true } };
+  assert.equal((await api(`/v1/conversations/${conv.id}/messages`, { ...body, routing: { mode: 'auto', modelId: 'not-installed' } }, randomUUID())).status, 409);
   const key = randomUUID();
   const submitted = await api(`/v1/conversations/${conv.id}/messages`, body, key);
   assert.ok([200, 201, 202].includes(submitted.status), JSON.stringify(submitted.body));

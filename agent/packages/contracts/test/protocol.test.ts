@@ -23,6 +23,14 @@ test('canonical request digest ignores object insertion order but retains array 
   assert.equal(canonicalJson({ b: 2, a: { y: 1, x: 2 } }), canonicalJson({ a: { x: 2, y: 1 }, b: 2 }));
   assert.notEqual(canonicalJson([1, 2]), canonicalJson([2, 1]));
 });
+test('an optional exact model preference round-trips for auto routing and pinned nodes', () => {
+  const input = { protocolVersion: '1', text: 'hello', expectedRevision: 0 };
+  assert.deepEqual(submitMessageSchema.parse(input).routing, { mode: 'auto' });
+  for (const routing of [{ mode: 'auto', modelId: 'muse-glimmer:30b-mlx' }, { mode: 'manual', nodeId: uuid, modelId: 'gemma4:31b-mlx' }]) {
+    assert.deepEqual(submitMessageSchema.parse({ ...input, routing }).routing, routing);
+    for (const modelId of ['', 'x'.repeat(257), 123, null]) assert.equal(submitMessageSchema.safeParse({ ...input, routing: { ...routing, modelId } }).success, false);
+  }
+});
 test('execution fixture preserves scope and rejects malformed digest', () => {
   const fixture = { protocolVersion: '1', attemptId: uuid, taskId: uuid, conversationId: uuid, nodeId: uuid, bootId: uuid, generation: uuid, deadline: '2026-11-08T12:00:00.000Z', profileId: 'gemma', workspaceId: 'default', allowedTools: [], messages: [{ role: 'user', text: 'hi' }], inputDigest: 'a'.repeat(64) };
   assert.deepEqual(executionRequestSchema.parse(fixture), fixture);

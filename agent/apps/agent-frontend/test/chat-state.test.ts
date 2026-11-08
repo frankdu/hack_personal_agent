@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { conversationSchema, fleetNodeSchema, taskSchema } from "@agent/contracts";
-import { eligibleNode, isTaskActive, pendingAssistantOutput, selectedNodeProblem } from "../src/lib/chat-state.ts";
+import { eligibleNode, isTaskActive, pendingAssistantOutput, readyModelIds, selectedNodeProblem } from "../src/lib/chat-state.ts";
 import { apiRequest, ApiRequestError, normalizeBackendUrl, submissionMayHaveSucceeded } from "../src/lib/api.ts";
 
 const id = "00000000-0000-4000-8000-000000000001";
@@ -27,6 +27,16 @@ test("manual pin refuses offline, missing, unready, workspace or tool mismatches
 test("unknown execution is not retried as running", () => {
   assert.equal(isTaskActive("unknown"), false);
   assert.equal(isTaskActive("running"), true);
+});
+test("model choices deduplicate ready models on online nodes and model preferences constrain pins", () => {
+  const qwen = { ...node, profiles: [{ ...node.profiles[0]!, modelId: "qwen3:8b" }] };
+  assert.deepEqual(readyModelIds([node, node, qwen, { ...qwen, profiles: [{ ...qwen.profiles[0]!, modelId: "inactive", state: "stopped" }] }, { ...qwen, status: "offline", profiles: [{ ...qwen.profiles[0]!, modelId: "offline" }] }]), ["gemma", "qwen3:8b"]);
+  assert.equal(eligibleNode(node, "default", [], "gemma"), true);
+  assert.equal(eligibleNode(node, "default", [], "qwen3:8b"), false);
+  assert.equal(selectedNodeProblem([node], id, "default", [], "gemma"), null);
+  assert.match(selectedNodeProblem([node], id, "default", [], "qwen3:8b")!, /qwen3:8b active and ready/);
+  assert.equal(eligibleNode({ ...node, activeAttempts: [id] }, "default", [], "gemma"), false);
+  assert.match(selectedNodeProblem([{ ...node, activeAttempts: [id] }], id, "default", [], "gemma")!, /busy/);
 });
 test("connection URL excludes credentials and unsupported schemes", () => {
   assert.equal(normalizeBackendUrl(" http://127.0.0.1:3100/ "), "http://127.0.0.1:3100");

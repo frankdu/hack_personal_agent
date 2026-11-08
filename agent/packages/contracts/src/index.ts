@@ -9,8 +9,8 @@ export const enabledToolSchema = z.enum(['read', 'bash', 'edit', 'write', 'grep'
 export type EnabledTool = z.infer<typeof enabledToolSchema>;
 
 export const routingPreferenceSchema = z.discriminatedUnion('mode', [
-  z.object({ mode: z.literal('auto') }).strict(),
-  z.object({ mode: z.literal('manual'), nodeId: z.string().min(1) }).strict(),
+  z.object({ mode: z.literal('auto'), modelId: z.string().min(1).max(256).optional() }).strict(),
+  z.object({ mode: z.literal('manual'), nodeId: z.string().min(1), modelId: z.string().min(1).max(256).optional() }).strict(),
 ]);
 export type RoutingPreference = z.infer<typeof routingPreferenceSchema>;
 
@@ -30,12 +30,15 @@ export const modelProfileSchema = z.object({
   runtime: z.enum(['native', 'docker', 'external']), state: z.enum(['stopped', 'starting', 'ready', 'failed']),
   contextWindow: z.number().int().positive(), concurrency: z.number().int().positive(),
   discovery: z.object({
-    source: z.literal('ollama'), selected: z.boolean(), reason: z.string().max(256),
+    source: z.literal('ollama'), selected: z.boolean(), selectable: z.boolean().optional(), reason: z.string().max(256),
     parameterCount: z.number().positive().optional(), tokensPerSecond: z.number().nonnegative().optional(),
     measuredAt: time.optional(),
   }).optional(),
 });
 export type ModelProfile = z.infer<typeof modelProfileSchema>;
+export const modelSelectionSchema = z.object({ profileId: z.string().min(1).max(128) }).strict();
+export const nodeModelSelectionSchema = modelSelectionSchema.extend({ bootId: id, generation: id }).strict();
+export const modelSelectionResponseSchema = z.object({ profiles: z.array(modelProfileSchema) }).strict();
 export const registrationSchema = z.object({
   protocolVersion: z.literal(PROTOCOL_VERSION), nodeId: id, bootId: id, name: z.string().min(1).max(128),
   endpoint: z.string().url(), hardware: hardwareSchema, enabledTools: z.array(enabledToolSchema),

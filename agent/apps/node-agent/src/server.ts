@@ -1,11 +1,12 @@
 import { createServer, type IncomingMessage } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
-import { executionRequestSchema, type Hardware } from '@agent/contracts';
+import { executionRequestSchema, nodeModelSelectionSchema, type Hardware } from '@agent/contracts';
 import type { NodeConfig } from './config.js';
 import { Executions, RequestError } from './executions.js';
 export interface ServerDependencies {
   executions: Executions; hardware: Hardware; nodeId: string; bootId: string;
   profiles: () => unknown[]; registered: () => boolean; discoveryStatus?: () => string | undefined;
+  selectModel?: (input: ReturnType<typeof nodeModelSelectionSchema.parse>) => void;
 }
 async function body(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = []; let size = 0;
@@ -29,6 +30,14 @@ export function createNodeServer(config: NodeConfig, dependencies?: ServerDepend
       if (request.method === 'GET' && pathname === '/v1/node/status') return send(200, { name: config.name, mode: config.mode, nodeId: dependencies?.nodeId, bootId: dependencies?.bootId, enabledTools: config.enabledTools, hardware: dependencies?.hardware, profiles: dependencies?.profiles() ?? [], modelDiscovery: dependencies?.discoveryStatus?.(), registered: dependencies?.registered() ?? false, executionReady: !draining && Boolean(dependencies?.executions.ready()) });
       if (!authenticated(request.headers.authorization, config.sharedToken)) throw new RequestError(401, 'unauthorized');
       if (!dependencies) throw new RequestError(503, 'execution_not_configured');
+      if (request.method === 'POST' && pathname === '/v1/node/model') {
+        if (draining) throw new RequestError(503, 'draining');
+        const parsed = nodeModelSelectionSchema.safeParse(await body(request));
+        if (!parsed.success) throw new RequestError(400, 'invalid_model_selection');
+        if (!dependencies.selectModel) throw new RequestError(409, 'model_selection_unavailable', 'This node uses an explicitly configured runtime.');
+        dependencies.selectModel(parsed.data);
+        return send(202, { profiles: dependencies.profiles() });
+      }
       if (request.method === 'POST' && pathname === '/v1/executions') {
         if (draining) throw new RequestError(503, 'draining');
         const parsed = executionRequestSchema.safeParse(await body(request));

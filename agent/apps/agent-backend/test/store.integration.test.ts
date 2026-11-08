@@ -36,9 +36,43 @@ test('PostgreSQL audit, dispatch, leases, idempotency, unknown outcomes and HTTP
       await assert.rejects(app.store.heartbeat(registration.nodeId, hb), /must increase/);
       const fleet = (await app.store.nodes())[0]!.node; assert.equal('endpoint' in fleet, false);
     });
+    await t.test('operator model control forwards a fenced request and removes readiness while warming', async context => {
+      const profiles = [
+        { ...registration.profiles[0]!, discovery: { source: 'ollama' as const, selected: true, selectable: true, reason: 'Selected' } },
+        { ...registration.profiles[0]!, id: 'qwen', modelId: 'qwen3:8b', state: 'stopped' as const, discovery: { source: 'ollama' as const, selected: false, selectable: true, reason: 'Speed requirement met' } },
+      ];
+      await app.store.register({ ...registration, profiles });
+      let calls = 0; let rejectSwitch = true;
+      const originalFetch = globalThis.fetch;
+      context.mock.method(globalThis, 'fetch', async (url: string | URL | Request, init?: RequestInit) => {
+        if (String(url) !== `${registration.endpoint}/v1/node/model`) return originalFetch(url, init);
+        calls++;
+        assert.equal(new Headers(init?.headers).get('authorization'), `Bearer ${config.nodeToken}`);
+        assert.equal(init?.redirect, 'error');
+        assert.deepEqual(JSON.parse(String(init?.body)), { profileId: 'qwen', bootId: registration.bootId, generation: lease.generation });
+        if (rejectSwitch) return Response.json({ error: { code: 'node_busy', message: 'Node is busy.' } }, { status: 409 });
+        return Response.json({ profiles: profiles.map(p => ({ ...p, state: p.id === 'qwen' ? 'starting' : 'stopped', discovery: { ...p.discovery, selected: false, selectable: false } })) }, { status: 202 });
+      });
+      const control = (token: string, profileId = 'qwen') => fetch(`${http}/v1/nodes/${registration.nodeId}/model`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ profileId }) });
+      assert.equal((await control(config.nodeToken)).status, 401);
+      assert.equal((await control(config.apiToken, 'missing')).status, 409);
+      assert.equal(calls, 0);
+      assert.equal((await control(config.apiToken)).status, 409);
+      assert.equal((await app.store.nodes())[0]!.node.profiles[0]!.state, 'ready');
+      rejectSwitch = false;
+      const response = await control(config.apiToken);
+      assert.equal(response.status, 202);
+      const fleet = (await app.store.nodes())[0]!.node;
+      assert.equal(fleet.profiles.some(p => p.state === 'ready'), false);
+      assert.equal(fleet.profiles.find(p => p.id === 'qwen')?.state, 'starting');
+      await app.store.register(registration);
+    });
     const conversation = await app.store.createConversation();
     const input = submitMessageSchema.parse({ protocolVersion: '1', text: 'Hello', expectedRevision: 0 });
     const first = await app.store.submit(conversation.id, 'request-1', input);
+    await t.test('queued attempts block model switching before dispatch', async () => {
+      await assert.rejects(app.store.selectModel(registration.nodeId, 'gemma'), /active or unresolved tasks/);
+    });
     await t.test('one transaction writes decision, attempt and outbox; replay is idempotent', async () => {
       for (const table of ['tasks', 'routing_decisions', 'execution_attempts', 'dispatch_outbox']) assert.equal(Number((await app.store.pool.query(`SELECT count(*) AS n FROM ${table}`)).rows[0].n), 1);
       assert.equal((await app.store.submit(conversation.id, 'request-1', input)).task.id, first.task.id);
@@ -57,6 +91,31 @@ test('PostgreSQL audit, dispatch, leases, idempotency, unknown outcomes and HTTP
       const final = await app.store.conversation(conversation.id); assert.equal(final.activeTaskId, null); assert.equal(final.revision, 2); assert.equal(final.messages[1]!.text, 'Hello from the model');
       const events = await app.store.events(conversation.id, 0); assert(events.length >= 5);
       assert((await app.store.events(conversation.id, events[1]!.id)).every(e => e.id > events[1]!.id));
+    });
+    await t.test('HTTP model preference narrows nodes and survives persistence and idempotency checks', async () => {
+      const matchingNode = { ...registration, nodeId: randomUUID(), bootId: randomUUID(), name: 'matching-model-node',
+        profiles: [{ ...registration.profiles[0]!, id: 'qwen-local', modelId: 'qwen3:8b' }] };
+      await app.store.register(matchingNode);
+      const branch = await app.store.createConversation();
+      const post = (modelId: string, key: string) => fetch(`${http}/v1/conversations/${branch.id}/messages`, {
+        method: 'POST', headers: { authorization: `Bearer ${config.apiToken}`, 'content-type': 'application/json', 'idempotency-key': key },
+        body: JSON.stringify({ ...input, routing: { mode: 'auto', modelId } }),
+      });
+      assert.equal((await post('missing-model', 'filter-request')).status, 409);
+      assert.equal((await app.store.conversation(branch.id)).revision, 0);
+      const response = await post('qwen3:8b', 'filter-request');
+      assert.equal(response.status, 202);
+      const accepted = await response.json();
+      assert.equal(accepted.task.decision.nodeId, matchingNode.nodeId);
+      assert.equal(accepted.task.decision.profileId, 'qwen-local');
+      assert.equal(accepted.task.decision.reasonCode, 'SOLE_ELIGIBLE_CANDIDATE');
+      assert.equal(accepted.task.decision.provider, 'rules');
+      assert.equal((await (await post('qwen3:8b', 'filter-request')).json()).task.id, accepted.task.id);
+      assert.equal((await post('gemma-test', 'filter-request')).status, 409, 'a changed model cannot reuse a submission key');
+      const attempt = (await app.store.pending()).find(a => a.body.id === accepted.task.id)!;
+      assert.equal(attempt.request.profileId, 'qwen-local');
+      await app.store.localOutcome(attempt, 'cancelled', 'Test cancellation before dispatch.');
+      await app.store.pool.query("UPDATE nodes SET lease_expires=now()-interval '1 second' WHERE id=$1", [matchingNode.nodeId]);
     });
     await t.test('concurrent conversation revisions accept only one new task', async () => {
       const branch = await app.store.createConversation();
