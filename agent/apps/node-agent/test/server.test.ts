@@ -12,13 +12,21 @@ test("health distinguishes liveness from execution readiness and rejects task su
   try {
     assert.equal((await fetch(`${origin}/health/live`)).status, 200);
     assert.equal((await fetch(`${origin}/health/ready`)).status, 503);
-    const status = await fetch(`${origin}/v1/node/status`).then((response) => response.json());
+    const status = await fetch(`${origin}/v1/node/status`).then((response) =>
+      response.json(),
+    );
     assert.equal(status.executionReady, false);
     assert.deepEqual(status.enabledTools, []);
-    assert.equal((await fetch(`${origin}/v1/tasks`, { method: "POST" })).status, 401);
+    assert.equal(
+      (await fetch(`${origin}/v1/tasks`, { method: "POST" })).status,
+      401,
+    );
     drain();
     assert.equal((await fetch(`${origin}/health/live`)).status, 503);
   } finally {
-    await new Promise<void>((resolve) => { server.close(() => resolve()); server.closeAllConnections(); });
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+      server.closeAllConnections();
+    });
   }
 });

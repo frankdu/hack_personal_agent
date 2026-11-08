@@ -6,7 +6,17 @@ services:
   agent-frontend:
     build:
       target: development
-    command: [npm, run, dev, --workspace, "@agent/agent-frontend", --, --host, "0.0.0.0"]
+    command:
+      [
+        npm,
+        run,
+        dev,
+        --workspace,
+        "@agent/agent-frontend",
+        --,
+        --host,
+        "0.0.0.0",
+      ]
     environment:
       MODE: DEV
       NODE_ENV: development

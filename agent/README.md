@@ -69,6 +69,17 @@ docker compose -f compose.yaml --profile node down
 
 `down` retains working data volumes.
 
+## Formatting
+
+Prettier is configured at the workspace root using its default style. Run these commands from this directory to format source code and documentation or check formatting:
+
+```sh
+npm run format
+npm run format:check
+```
+
+Generated files, build output and ignored local files are excluded.
+
 ## Verification
 
 ```sh
@@ -77,6 +88,6 @@ npm run test:integration
 npm run protocol:generate
 ```
 
-`check` builds, typechecks and runs unit/fixture tests. Database tests skip there unless `TEST_DATABASE_URL` is provided. `test:integration` creates its own disposable PostgreSQL container on an ephemeral port, runs database failure tests and the real Pi execution path, then removes that container. It does not use an existing database or download a model. Scripted inference proves transport, SDK, tool and cancellation behavior, not Gemma quality/performance.
+`check` checks formatting, builds, typechecks and runs unit/fixture tests. Database tests skip there unless `TEST_DATABASE_URL` is provided. `test:integration` creates its own disposable PostgreSQL container on an ephemeral port, runs database failure tests and the real Pi execution path, then removes that container. It does not use an existing database or download a model. Scripted inference proves transport, SDK, tool and cancellation behavior, not Gemma quality/performance.
 
 See [VALIDATION.md](VALIDATION.md) for measured results. Commit generated protocol files alongside schema changes.

@@ -3,8 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
@@ -12,5 +19,7 @@
     "generate": "node --import tsx scripts/generate.ts",
     "test": "node --import tsx --test test/*.test.ts"
   },
-  "dependencies": { "zod": "4.6.7" }
+  "dependencies": {
+    "zod": "4.6.7"
+  }
 }

@@ -1,0 +1,13 @@
+# Build output and caches (also excluded by .gitignore).
+node_modules/
+dist/
+.output/
+.tanstack/
+.nitro/
+.vite/
+coverage/
+
+# Generated files are maintained by npm and code generators.
+package-lock.json
+packages/contracts/generated/
+apps/agent-frontend/src/routeTree.gen.ts
