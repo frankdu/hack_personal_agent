@@ -1,4 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  Outlet,
+  useBlocker,
+  useNavigate,
+  useParams,
+} from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
@@ -52,7 +59,7 @@ import {
   selectedNodeProblem,
 } from "@/lib/chat-state";
 
-export const Route = createFileRoute("/")({ component: Workspace });
+export const Route = createFileRoute("/_workspace")({ component: Workspace });
 const decisionsSchema = {
   parse: (value: unknown) => {
     if (
@@ -127,6 +134,7 @@ function Workspace() {
         onSettings={() => setSettingsOpen(true)}
         onDisconnect={disconnect}
       />
+      <Outlet />
       {settingsOpen && (
         <div className="settings-backdrop">
           <section
@@ -210,6 +218,9 @@ function ChatWorkspace({
   onDisconnect: () => void;
 }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { conversationId: routeConversationId } = useParams({ strict: false });
+  const conversationId = routeConversationId ?? null;
   const [draft, setDraft] = useState("");
   const [routing, setRouting] = useState("auto");
   const [modelId, setModelId] = useState("");
@@ -217,7 +228,6 @@ function ChatWorkspace({
   const [allowedTools, setAllowedTools] = useState<EnabledTool[]>([]);
   const [allowHostedJudgment, setAllowHostedJudgment] = useState(true);
   const [allowRulesFallback, setAllowRulesFallback] = useState(true);
-  const [conversationId, setConversationId] = useState<string | null>(null);
   const [lastTaskId, setLastTaskId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -227,6 +237,14 @@ function ChatWorkspace({
   const submitLock = useRef(false);
   const actionAbort = useRef<AbortController | null>(null);
   const messageEnd = useRef<HTMLDivElement | null>(null);
+  const displayedConversationId = useRef(conversationId);
+  useEffect(() => {
+    if (displayedConversationId.current === conversationId) return;
+    displayedConversationId.current = conversationId;
+    setLastTaskId(null);
+    setDraft("");
+    setActionError("");
+  }, [conversationId]);
   useEffect(() => {
     live.current = true;
     return () => {
@@ -307,6 +325,11 @@ function ChatWorkspace({
   const task = taskQuery.data;
   const active =
     !!conversation?.activeTaskId || (!!task && isTaskActive(task.status));
+  useBlocker({
+    shouldBlockFn: ({ current, next }) =>
+      current.pathname !== next.pathname && (active || submitting || !!pending),
+    enableBeforeUnload: false,
+  });
   const nodes = nodesQuery.data?.nodes ?? [];
   const onlineNodes = nodes.filter((node) => node.status === "online");
   const models = readyModelIds(nodes);
@@ -363,11 +386,20 @@ function ChatWorkspace({
               { method: "POST", body: {}, signal: controller.signal },
             );
         if (!live.current) return;
-        setConversationId(current.id);
         queryClient.setQueryData(
           [...prefix, "conversation", current.id],
           current,
         );
+        if (!conversationId) {
+          // Keep the draft and submission state when it gains a permalink.
+          displayedConversationId.current = current.id;
+          await navigate({
+            to: "/conversations/$conversationId",
+            params: { conversationId: current.id },
+            ignoreBlocker: true,
+          });
+          if (!live.current) return;
+        }
         if (current.activeTaskId)
           throw new Error(
             "This conversation already has an active task. Wait for it or cancel it first.",
@@ -485,13 +517,6 @@ function ChatWorkspace({
     void queryClient.invalidateQueries({ queryKey: [...prefix, "nodes"] });
   }
 
-  function openConversation(id: string | null) {
-    if (active || submitting || pending) return;
-    setConversationId(id);
-    setLastTaskId(null);
-    setDraft("");
-    setActionError("");
-  }
   const sendDisabled =
     !connection ||
     !draft.trim() ||
@@ -508,19 +533,23 @@ function ChatWorkspace({
   return (
     <div className="workspace-shell">
       <aside className="sidebar" aria-label="Workspace navigation">
-        <a className="brand" href="/" aria-label="Curilo Agent home">
+        <Link className="brand" to="/" aria-label="Curilo Agent home">
           <span className="brand-mark">
             <Layers3 size={21} />
           </span>
           <span>
             Curilo Agent<small>YOUR WORKSPACE</small>
           </span>
-        </a>
+        </Link>
         <Button
           variant="outline"
           className="new-chat"
           disabled={active || submitting || !!pending}
-          onClick={() => openConversation(null)}
+          onClick={() => {
+            setDraft("");
+            setActionError("");
+            void navigate({ to: "/" });
+          }}
         >
           <Plus /> New conversation
         </Button>
@@ -551,7 +580,6 @@ function ChatWorkspace({
                 : null
             }
             disabled={active || submitting || !!pending}
-            onSelect={openConversation}
             onRetry={() => void conversationsQuery.refetch()}
           />
         )}

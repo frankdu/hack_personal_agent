@@ -682,7 +682,7 @@ h1 {
   background: #e5eadf;
   color: #385f42;
 }
-.conversation-link:disabled {
+.conversation-link[aria-disabled="true"] {
   cursor: default;
   opacity: 0.65;
 }

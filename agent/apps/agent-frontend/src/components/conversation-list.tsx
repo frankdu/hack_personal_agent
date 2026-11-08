@@ -1,4 +1,5 @@
 import type { ConversationSummary } from "@agent/contracts";
+import { Link } from "@tanstack/react-router";
 import { MessageSquare } from "lucide-react";
 
 export function ConversationList({
@@ -7,7 +8,6 @@ export function ConversationList({
   loading,
   error,
   disabled,
-  onSelect,
   onRetry,
 }: {
   conversations: ConversationSummary[];
@@ -15,7 +15,6 @@ export function ConversationList({
   loading: boolean;
   error: string | null;
   disabled: boolean;
-  onSelect: (id: string) => void;
   onRetry: () => void;
 }) {
   return (
@@ -40,13 +39,13 @@ export function ConversationList({
       <ul className="conversation-list">
         {conversations.map((conversation) => (
           <li key={conversation.id}>
-            <button
-              type="button"
+            <Link
+              to="/conversations/$conversationId"
+              params={{ conversationId: conversation.id }}
               className={`conversation-link ${selectedId === conversation.id ? "is-selected" : ""}`}
               aria-current={selectedId === conversation.id ? "page" : undefined}
               title={conversation.title}
               disabled={disabled}
-              onClick={() => onSelect(conversation.id)}
             >
               <MessageSquare size={15} aria-hidden="true" />
               <span className="conversation-link-text">
@@ -58,7 +57,7 @@ export function ConversationList({
               {conversation.activeTaskId && (
                 <span className="nav-dot" aria-label="Task in progress" />
               )}
-            </button>
+            </Link>
           </li>
         ))}
       </ul>
