@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import { DEFAULT_CODING_TOOLS } from "@agent/contracts";
 import { readConfig } from "../src/config.js";
 import { createNodeServer } from "../src/server.js";
 
@@ -16,7 +17,7 @@ test("health distinguishes liveness from execution readiness and rejects task su
       response.json(),
     );
     assert.equal(status.executionReady, false);
-    assert.deepEqual(status.enabledTools, []);
+    assert.deepEqual(status.enabledTools, DEFAULT_CODING_TOOLS);
     assert.equal(
       (await fetch(`${origin}/v1/tasks`, { method: "POST" })).status,
       401,

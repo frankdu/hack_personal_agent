@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
+import { relative, isAbsolute } from "node:path";
+import { DEFAULT_CODING_TOOLS } from "@agent/contracts";
 import { test } from "vitest";
 import { readConfig } from "../src/config.js";
 
-test("tool access is opt-in and SDK selection syntax cannot bypass the allowlist", () => {
-  assert.deepEqual(readConfig({}).enabledTools, []);
+test("coding tools default on, explicit restrictions work, SDK syntax cannot bypass the allowlist", () => {
+  assert.deepEqual(readConfig({}).enabledTools, DEFAULT_CODING_TOOLS);
+  assert.deepEqual(readConfig({ ENABLED_TOOLS: "" }).enabledTools, []);
+  assert.deepEqual(readConfig({ ENABLED_TOOLS: "  " }).enabledTools, []);
   assert.deepEqual(
     readConfig({ ENABLED_TOOLS: "read, ls,read" }).enabledTools,
     ["read", "ls"],
@@ -14,6 +18,18 @@ test("tool access is opt-in and SDK selection syntax cannot bypass the allowlist
       /Unsupported tool/,
     );
   }
+});
+
+test("default private state stays outside the default coding workspace", () => {
+  const config = readConfig({});
+  const stateWithinWorkspace = relative(config.workspaceDir, config.stateDir);
+  assert.ok(
+    stateWithinWorkspace.startsWith("..") || isAbsolute(stateWithinWorkspace),
+  );
+  assert.equal(
+    readConfig({ NODE_STATE_DIR: "/private/custom-state" }).stateDir,
+    "/private/custom-state",
+  );
 });
 
 test("Ollama discovery defaults to local measurement and validates configuration", () => {

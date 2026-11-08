@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "vitest";
-import type { ExecutionRequest } from "@agent/contracts";
+import { submitMessageSchema, type ExecutionRequest } from "@agent/contracts";
 import { readConfig } from "../src/config.js";
 import { ExecutionError, type RunHooks } from "../src/executions.js";
 import { PiExecutor } from "../src/pi-session.js";
@@ -133,6 +133,12 @@ test("no-tool tasks explicitly state capabilities even when history claims tools
     assert.match(prompt, /Tools enabled for this task: none/);
     assert.match(prompt, /Do not promise to run checks/);
     assert.match(prompt, /Prior assistant promises are not evidence/);
+    assert.match(prompt, /Be concise by default/);
+    assert.match(prompt, /For a greeting, reply with a brief greeting/);
+    assert.match(
+      prompt,
+      /Mention tool availability or limitations only when they affect the user's request/,
+    );
     assert.ok(
       f.bodies[0].messages.some(
         (message: any) => message.content === "I'll check using Bash and Glob.",
@@ -143,7 +149,7 @@ test("no-tool tasks explicitly state capabilities even when history claims tools
   }
 });
 
-test("authorized tool turns execute and retain paragraph boundaries before the final answer", async () => {
+test("default coding tools execute and retain paragraph boundaries before the final answer", async () => {
   const f = await fixture((_body, res, call) => {
     if (call === 1)
       stream(
@@ -168,7 +174,11 @@ test("authorized tool turns execute and retain paragraph boundaries before the f
       );
     else stream(res, [{ content: "The file contains hello." }]);
   });
-  f.request.allowedTools = ["read"];
+  f.request.allowedTools = submitMessageSchema.parse({
+    protocolVersion: "1",
+    text: "Read sample.txt",
+    expectedRevision: 0,
+  }).policy.allowedTools;
   await writeFile(join(f.workspace, "sample.txt"), "hello");
   try {
     assert.equal(
@@ -179,11 +189,11 @@ test("authorized tool turns execute and retain paragraph boundaries before the f
     assert.equal(f.bodies.length, 2);
     assert.match(
       f.bodies[0].messages[0].content,
-      /Tools enabled for this task: read\./,
+      /Tools enabled for this task: read, bash, edit, write, grep, find, ls\./,
     );
     assert.deepEqual(
       f.bodies[0].tools.map((tool: any) => tool.function.name),
-      ["read"],
+      f.request.allowedTools,
     );
     assert.ok(
       f.bodies[1].messages.some(

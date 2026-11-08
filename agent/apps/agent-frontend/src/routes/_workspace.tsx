@@ -12,6 +12,7 @@ import {
   conversationSchema,
   conversationsResponseSchema,
   decisionSchema,
+  DEFAULT_CODING_TOOLS,
   enabledToolSchema,
   modelSelectionResponseSchema,
   nodesResponseSchema,
@@ -226,7 +227,9 @@ function ChatWorkspace({
   const [routing, setRouting] = useState("auto");
   const [modelId, setModelId] = useState("");
   const [workspaceId, setWorkspaceId] = useState("default");
-  const [allowedTools, setAllowedTools] = useState<EnabledTool[]>([]);
+  const [allowedTools, setAllowedTools] = useState<EnabledTool[]>(() => [
+    ...DEFAULT_CODING_TOOLS,
+  ]);
   const [allowHostedJudgment, setAllowHostedJudgment] = useState(true);
   const [allowRulesFallback, setAllowRulesFallback] = useState(true);
   const [lastTaskId, setLastTaskId] = useState<string | null>(null);
@@ -934,9 +937,9 @@ function ChatWorkspace({
                   </div>
                 </fieldset>
                 <p className="permission-note">
-                  Tools are off by default. Bash can execute commands. Enabled
-                  tools use the configured working directory; they are not a
-                  sandbox.
+                  Coding tools are enabled by default. Uncheck tools to disable
+                  them for this task. Bash can execute commands; the working
+                  directory is not a sandbox.
                 </p>
                 <label className="policy-check">
                   <input

@@ -15,6 +15,8 @@ export const enabledToolSchema = z.enum([
   "ls",
 ]);
 export type EnabledTool = z.infer<typeof enabledToolSchema>;
+export const DEFAULT_CODING_TOOLS: readonly EnabledTool[] =
+  enabledToolSchema.options;
 
 export const routingPreferenceSchema = z.discriminatedUnion("mode", [
   z
@@ -137,7 +139,7 @@ export const nodesResponseSchema = z.object({
 export const taskPolicySchema = z
   .object({
     workspaceId: z.string().min(1).max(128).default("default"),
-    allowedTools: z.array(enabledToolSchema).default([]),
+    allowedTools: z.array(enabledToolSchema).default([...DEFAULT_CODING_TOOLS]),
     allowHostedJudgment: z.boolean().default(true),
     allowRulesFallback: z.boolean().default(true),
   })
@@ -151,7 +153,7 @@ export const submitMessageSchema = z
     routing: routingPreferenceSchema.default({ mode: "auto" }),
     policy: taskPolicySchema.default({
       workspaceId: "default",
-      allowedTools: [],
+      allowedTools: [...DEFAULT_CODING_TOOLS],
       allowHostedJudgment: true,
       allowRulesFallback: true,
     }),

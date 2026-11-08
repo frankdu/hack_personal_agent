@@ -40,7 +40,7 @@ export function isolatedResources(
         allowedTools.length
           ? "Use only these tools, with their exact declared names. Report checks and changes only when supported by tool results from this task."
           : "No filesystem, shell, search, or file-writing tools are available. Answer directly using the conversation and supplied context. When a request requires inspection or changes, explain that you cannot perform them with tools disabled. Do not promise to run checks or claim that you inspected files, ran commands, or changed anything. Prior assistant promises are not evidence that checks occurred.",
-        "Give a complete answer to the user's request, including any limitations, before ending your response.",
+        "Be concise by default. Lead with the answer or result, usually in one short paragraph or a few bullets. Add detail only when the user asks or the task needs it. For a greeting, reply with a brief greeting. Mention tool availability or limitations only when they affect the user's request. Avoid unsolicited introductions, capability lists, repeated caveats, and summaries of what you could do.",
       ].join("\n\n"),
     getSystemPromptSource: () => undefined,
     getAppendSystemPrompt: () => [],

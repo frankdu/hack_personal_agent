@@ -61,6 +61,7 @@ describe(
       protocolVersion: "1",
       text: "Hello",
       expectedRevision: 0,
+      policy: { allowedTools: ["read"] },
     });
 
     beforeAll(async () => {

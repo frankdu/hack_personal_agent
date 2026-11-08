@@ -266,6 +266,21 @@
       "createdAt"
     ]
   },
+  "deleteMessageSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "expectedRevision": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      }
+    },
+    "required": [
+      "expectedRevision"
+    ],
+    "additionalProperties": false
+  },
   "enabledToolSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "string",
@@ -2250,7 +2265,15 @@
       "policy": {
         "default": {
           "workspaceId": "default",
-          "allowedTools": [],
+          "allowedTools": [
+            "read",
+            "bash",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls"
+          ],
           "allowHostedJudgment": true,
           "allowRulesFallback": true
         },
@@ -2263,7 +2286,15 @@
             "maxLength": 128
           },
           "allowedTools": {
-            "default": [],
+            "default": [
+              "read",
+              "bash",
+              "edit",
+              "write",
+              "grep",
+              "find",
+              "ls"
+            ],
             "type": "array",
             "items": {
               "type": "string",
@@ -2308,7 +2339,15 @@
         "maxLength": 128
       },
       "allowedTools": {
-        "default": [],
+        "default": [
+          "read",
+          "bash",
+          "edit",
+          "write",
+          "grep",
+          "find",
+          "ls"
+        ],
         "type": "array",
         "items": {
           "type": "string",

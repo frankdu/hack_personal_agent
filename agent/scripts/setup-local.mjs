@@ -21,7 +21,8 @@ FRONTEND_ORIGINS=http://localhost:3300,http://127.0.0.1:3300,http://localhost:30
 JEV_API_KEY=
 # RUNTIME_CONFIG=/absolute/path/to/operator-approved-runtime.json
 # AGENT_WORKSPACE_DIR=/absolute/path/to/project
-# ENABLED_TOOLS=read,ls,grep,find
+# All coding tools are enabled by default. Set ENABLED_TOOLS= to disable all.
+# ENABLED_TOOLS=read,bash,edit,write,grep,find,ls
 `;
 try {
   await writeFile(new URL("../.env", import.meta.url), contents, {

@@ -51,6 +51,7 @@ const message = () =>
     protocolVersion: "1",
     text: "Explain this function",
     expectedRevision: 0,
+    policy: { allowedTools: ["read"] },
   });
 
 test("config separates credentials and rejects endpoint paths/credentials", () => {
@@ -150,7 +151,7 @@ test("an exact model preference filters placements before direct routing and nev
   const input = submitMessageSchema.parse({
     ...message(),
     routing: { mode: "auto", modelId: "muse-glimmer:30b-mlx" },
-    policy: { allowRulesFallback: false },
+    policy: { allowedTools: ["read"], allowRulesFallback: false },
   });
   const candidates = eligibleCandidates(records, input);
   assert.equal(candidates.length, 1);
@@ -247,7 +248,7 @@ test("multiple matching nodes send only matching placements to Jev", async () =>
   const input = submitMessageSchema.parse({
     ...message(),
     routing: { mode: "auto", modelId: "qwen3:8b" },
-    policy: { allowRulesFallback: false },
+    policy: { allowedTools: ["read"], allowRulesFallback: false },
   });
   const candidates = eligibleCandidates(
     [gemma, a, b].map((n) => ({ node: n, reserved: 0 })),

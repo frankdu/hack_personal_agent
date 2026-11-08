@@ -1,6 +1,7 @@
-import { hostname } from "node:os";
-import { resolve } from "node:path";
+import { homedir, hostname } from "node:os";
+import { join, resolve } from "node:path";
 import {
+  DEFAULT_CODING_TOOLS,
   enabledToolSchema,
   modeSchema,
   type EnabledTool,
@@ -66,7 +67,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): NodeConfig {
   ) {
     throw new Error("PORT must be an integer between 1 and 65535");
   }
-  const requested = (env.ENABLED_TOOLS ?? "")
+  const requested = (env.ENABLED_TOOLS ?? DEFAULT_CODING_TOOLS.join(","))
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
@@ -124,7 +125,9 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): NodeConfig {
     host,
     port,
     name: env.NODE_NAME?.trim() || hostname(),
-    stateDir: resolve(env.NODE_STATE_DIR ?? ".state/node-agent"),
+    stateDir: resolve(
+      env.NODE_STATE_DIR ?? join(homedir(), ".curilo-agent", "node-agent"),
+    ),
     workspaceDir: resolve(env.AGENT_WORKSPACE_DIR ?? process.cwd()),
     enabledTools: [...new Set(requested)] as EnabledTool[],
     modelProvider,

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
   canonicalJson,
+  DEFAULT_CODING_TOOLS,
   executionRequestSchema,
   registrationSchema,
   submitMessageSchema,
@@ -53,9 +54,21 @@ test("registration fixture round-trips; protocol mismatches and secret fields fa
     false,
   );
 });
-test("tools default empty, unknown tools rejected, manual routing requires a target", () => {
+test("coding tools default on, explicit restrictions are retained, unknown tools rejected", () => {
   const input = { protocolVersion: "1", text: "hello", expectedRevision: 0 };
-  assert.deepEqual(submitMessageSchema.parse(input).policy.allowedTools, []);
+  for (const policy of [undefined, {}, { workspaceId: "custom" }]) {
+    assert.deepEqual(
+      submitMessageSchema.parse({ ...input, policy }).policy.allowedTools,
+      DEFAULT_CODING_TOOLS,
+    );
+  }
+  for (const allowedTools of [[], ["read"]]) {
+    assert.deepEqual(
+      submitMessageSchema.parse({ ...input, policy: { allowedTools } }).policy
+        .allowedTools,
+      allowedTools,
+    );
+  }
   assert.equal(
     submitMessageSchema.safeParse({
       ...input,
