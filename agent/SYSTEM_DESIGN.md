@@ -1,6 +1,6 @@
 # Node services and browser terminal
 
-Design refinement: November 8, 2026. This specifies target behavior, not implemented features. It supersedes earlier assumptions that every online node must have a warm local model, that CPU inference containers are managed, or that GPU discovery starts a container. See [implementation status](./IMPLEMENTATION.md) for the current software.
+Design refinement: November 8, 2026. Browser terminals (T28/T30) are implemented; the provider/service/deployment changes below still specify target behavior. It supersedes earlier assumptions that every online node must have a warm local model, that CPU inference containers are managed, or that GPU discovery starts a container. See [implementation status](./IMPLEMENTATION.md) for the current software.
 
 ## Two responsibilities on each machine
 
@@ -139,7 +139,7 @@ Implementation acceptance must demonstrate:
 
 ## Implementation work packages
 
-This update changes design only. Existing automatic Ollama benchmarking/selection and runtime-manifest startup require a migration; Codex/Claude adapters, deployment controls and browser terminals are future work.
+Browser terminal brokerage and controls (T28/T30) are implemented. Existing automatic Ollama benchmarking/selection and runtime-manifest startup still require a migration; Codex/Claude adapters and deployment controls remain future work.
 
 | Package | Deliverable                                                                                   | Acceptance focus                                                                                  |
 | ------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |

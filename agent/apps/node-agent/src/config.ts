@@ -39,6 +39,12 @@ export interface NodeConfig {
   workspaceId: string;
   runtimeConfigPath?: string;
   ollama: OllamaConfig;
+  terminal?: {
+    enabled: boolean;
+    maxSessions: number;
+    idleTimeoutMs: number;
+    maxLifetimeMs: number;
+  };
 }
 
 function setting(
@@ -110,6 +116,11 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): NodeConfig {
     !["true", "false"].includes(env.OLLAMA_AUTO_DISCOVER)
   )
     throw new Error("OLLAMA_AUTO_DISCOVER must be true or false");
+  if (
+    env.TERMINAL_ENABLED !== undefined &&
+    !["true", "false"].includes(env.TERMINAL_ENABLED)
+  )
+    throw new Error("TERMINAL_ENABLED must be true or false");
   const ollamaUrl = new URL(env.OLLAMA_URL ?? "http://127.0.0.1:11434");
   if (
     ollamaUrl.protocol !== "http:" ||
@@ -144,6 +155,24 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): NodeConfig {
     runtimeConfigPath: env.RUNTIME_CONFIG
       ? resolve(env.RUNTIME_CONFIG)
       : undefined,
+    terminal: {
+      enabled: env.TERMINAL_ENABLED !== "false",
+      maxSessions: setting(env, "TERMINAL_MAX_SESSIONS", 8, 1, 32),
+      idleTimeoutMs: setting(
+        env,
+        "TERMINAL_IDLE_TIMEOUT_MS",
+        1800000,
+        1000,
+        86400000,
+      ),
+      maxLifetimeMs: setting(
+        env,
+        "TERMINAL_MAX_LIFETIME_MS",
+        86400000,
+        1000,
+        604800000,
+      ),
+    },
     ollama: {
       enabled: env.OLLAMA_AUTO_DISCOVER !== "false",
       url: ollamaUrl.origin,

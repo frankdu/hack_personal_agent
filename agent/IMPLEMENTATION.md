@@ -2,7 +2,7 @@
 
 Updated 2026-11-08. This is the first working colocated milestone, not completion of all acceptance criteria in the [research backlog](research-docs/implementation-tasks.md).
 
-The [node services and browser terminal refinement](SYSTEM_DESIGN.md) is design-only in this update. Independent serving enablement, authenticated Codex/Claude discovery and execution, the Gemma 4 deployment picker, and browser PTY/tmux are not implemented. Current automatic Ollama selection and manifest startup remain in place until the migration tasks land.
+Browser PTY/tmux terminals from the [node services refinement](SYSTEM_DESIGN.md) are implemented. Independent serving enablement, authenticated Codex/Claude discovery and execution, and the Gemma 4 deployment picker remain planned. Current automatic Ollama selection and manifest startup remain in place until the migration tasks land.
 
 | Area                  | Implemented                                                                                                                                                                     | Remaining                                                                                      |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -24,6 +24,12 @@ The [node services and browser terminal refinement](SYSTEM_DESIGN.md) is design-
 ## Chat workspaces and project tree
 
 Without a nonempty `AGENT_WORKSPACE_DIR`, execution now uses `~/.curilo/workspace/chat_sessions/<conversation-id>` consistently for Pi sessions, file tools and shell tools. The node auto-publishes `chat_sessions` under **Projects@<node name>**. Authenticated project APIs persist additional roots and serve paginated directory listings; the frontend renders lazy folder/file trees and imports legacy browser roots. Traversal, symlink expansion and private-state browsing are rejected. Explicit project configuration remains authoritative for execution; adding a tree root does not change tool scope.
+
+## Browser terminal (T28/T30)
+
+Implemented xterm.js → authenticated backend WebSocket relay → node-pty → dedicated tmux sessions, with an explicit temporary PTY fallback. Session creation/list/end, workspace selection, reconnect, explicit tmux takeover, durable offline termination requests, lifecycle audit, boot/lease/owner checks, single-use Origin-bound tickets, expiry, byte ACK flow control, queue bounds, and heartbeat cleanup are covered by real PTY/tmux and PostgreSQL integration tests. Sessions use the configured OS user; model availability and tool permissions do not gate shell access. Runtime shell access is labeled host or container. Node restart adopts only recorded tmux sessions from the same OS boot; reboot or missing tmux reports session loss. See the app READMEs for limits and setup.
+
+Remaining terminal operations work: certify Linux service-unit/reboot behavior and container restart policy on target deployments; outbound node tunnels and multi-user authentication remain outside the current trusted-operator scope.
 
 ## Operating limits
 

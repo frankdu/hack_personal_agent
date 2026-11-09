@@ -56,6 +56,88 @@ const document = {
   openapi: "3.1.0",
   info: { title: "Curilo Agent protocol", version: contracts.PROTOCOL_VERSION },
   paths: {
+    "/v1/nodes/{nodeId}/terminals": {
+      parameters: [parameter("nodeId")],
+      get: operation(null, "terminalListSchema"),
+      post: operation(
+        "createTerminalSchema",
+        "terminalSessionSchema",
+        false,
+        "201",
+      ),
+    },
+    "/v1/terminals/{sessionId}/ticket": {
+      parameters: [parameter("sessionId")],
+      post: operation("terminalTicketRequestSchema", "terminalTicketSchema"),
+    },
+    "/v1/terminals/{sessionId}/end": {
+      parameters: [parameter("sessionId")],
+      post: {
+        ...operation(null, "terminalSessionSchema"),
+        responses: {
+          "200": response("terminalSessionSchema"),
+          "202": {
+            ...response("terminalSessionSchema"),
+            description: "Termination persisted; awaiting node reconciliation.",
+          },
+          default: { ...response("apiErrorSchema"), description: "Error" },
+        },
+      },
+    },
+    "/v1/terminal-connections/{clientId}": {
+      parameters: [parameter("clientId")],
+      delete: {
+        security: [{ userToken: [] }],
+        responses: {
+          "200": {
+            description:
+              "Attachment tickets revoked and active writers detached for this browser connection.",
+          },
+        },
+      },
+    },
+    "/v1/node/terminals": {
+      post: {
+        ...operation("nodeTerminalRequestSchema", "terminalListSchema", true),
+        responses: {
+          "200": {
+            description:
+              "List returns terminalListSchema; end returns terminalSessionSchema.",
+            content: {
+              "application/json": {
+                schema: {
+                  oneOf: [
+                    ref("terminalListSchema"),
+                    ref("terminalSessionSchema"),
+                  ],
+                },
+              },
+            },
+          },
+          "201": response("terminalSessionSchema"),
+        },
+      },
+    },
+    "/v1/terminals/attach": {
+      get: {
+        description:
+          "WebSocket upgrade. Require an allowlisted Origin and TLS outside loopback. Send terminalAttachSchema as the first frame within five seconds. The 30-second ticket is single-use and never sent in a URL. Then exchange terminalClientFrameSchema / terminalServerFrameSchema; ACK output UTF-8 bytes after rendering. Attachment expires after 15 minutes; reconnect explicitly with a fresh ticket. No input replay.",
+        responses: {
+          "101": {
+            description:
+              "WebSocket upgraded; authorization completes on the first frame.",
+          },
+        },
+      },
+    },
+    "/v1/node/terminals/attach": {
+      get: {
+        description:
+          "Backend-only WebSocket upgrade with node bearer Authorization. Send nodeTerminalAttachSchema first; every attachment is bound to the current boot and lease generation.",
+        security: [{ nodeToken: [] }],
+        responses: { "101": { description: "Node terminal stream." } },
+      },
+    },
     "/v1/nodes": { get: operation(null, "nodesResponseSchema") },
     "/v1/nodes/{nodeId}/projects": {
       parameters: [parameter("nodeId")],

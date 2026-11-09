@@ -53,4 +53,15 @@ UPDATE nodes n SET superseded_by=o.id, lease_expires=LEAST(n.lease_expires, now(
 FROM owners o
 WHERE n.superseded_by IS NULL AND n.registration->>'endpoint'=o.endpoint AND n.id<>o.id;
 INSERT INTO schema_migrations(version) VALUES (2) ON CONFLICT DO NOTHING;
+CREATE TABLE IF NOT EXISTS terminal_sessions (
+ id uuid PRIMARY KEY, node_id uuid NOT NULL REFERENCES nodes(id), owner_id text NOT NULL,
+ body jsonb NOT NULL, end_requested boolean NOT NULL DEFAULT false, updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE terminal_sessions ADD COLUMN IF NOT EXISTS end_requested boolean NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS terminal_owner_node ON terminal_sessions(owner_id, node_id);
+CREATE TABLE IF NOT EXISTS terminal_lifecycle (
+ id bigserial PRIMARY KEY, session_id uuid NOT NULL REFERENCES terminal_sessions(id),
+ event text NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
+);
+INSERT INTO schema_migrations(version) VALUES (3) ON CONFLICT DO NOTHING;
 `;

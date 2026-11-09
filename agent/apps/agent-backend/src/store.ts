@@ -249,6 +249,41 @@ export class Store {
       return { node, reserved: Number(row.reserved) };
     });
   }
+  async terminalTarget(nodeId: string) {
+    const row = (
+      await this.pool.query("SELECT * FROM nodes WHERE id=$1", [nodeId])
+    ).rows[0];
+    if (!row || row.superseded_by) throw missing();
+    if (row.draining || row.lease_expires.getTime() <= Date.now())
+      throw new ApiError(
+        409,
+        "NODE_UNAVAILABLE",
+        "This node is offline or draining.",
+      );
+    const endpoint = origin((row.registration as Registration).endpoint);
+    if (!this.config.nodeOrigins.has(endpoint))
+      throw new ApiError(
+        403,
+        "NODE_ENDPOINT_DENIED",
+        "The node is no longer allowlisted.",
+      );
+    const url = new URL(endpoint);
+    if (
+      url.protocol !== "https:" &&
+      !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
+    )
+      throw new ApiError(
+        403,
+        "TERMINAL_TLS_REQUIRED",
+        "Remote terminal nodes require an HTTPS endpoint.",
+      );
+    return {
+      endpoint,
+      nodeId,
+      bootId: row.boot_id as string,
+      generation: row.generation as string,
+    };
+  }
   /** Authenticated operator-only project APIs; destinations come from enrolled nodes. */
   async projectRequest(
     nodeId: string,

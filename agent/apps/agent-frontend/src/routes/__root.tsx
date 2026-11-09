@@ -5,6 +5,7 @@ import {
   Outlet,
   Scripts,
 } from "@tanstack/react-router";
+import terminalStylesheet from "@xterm/xterm/css/xterm.css?url";
 import stylesheet from "../styles.css?url";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
@@ -19,7 +20,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           content: "One workspace for Curilo Agent and connected machines.",
         },
       ],
-      links: [{ rel: "stylesheet", href: stylesheet }],
+      links: [
+        { rel: "stylesheet", href: stylesheet },
+        { rel: "stylesheet", href: terminalStylesheet },
+      ],
     }),
     component: () => (
       <html lang="en">

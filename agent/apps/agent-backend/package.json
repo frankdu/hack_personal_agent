@@ -17,10 +17,12 @@
   },
   "dependencies": {
     "@agent/contracts": "0.1.0",
-    "pg": "8.23.1"
+    "pg": "8.23.1",
+    "ws": "8.22.2"
   },
   "devDependencies": {
     "@types/pg": "8.23.1",
+    "@types/ws": "8.18.2",
     "vitest": "5.1.0"
   }
 }

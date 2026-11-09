@@ -30,7 +30,8 @@
     "check": "npm run format:check && npm run build && npm run typecheck && npm test",
     "compose:dev": "docker compose -f compose.yaml -f compose.dev.yaml up --build",
     "compose:prod": "docker compose -f compose.yaml up --build -d",
-    "test:watch": "npm run build:packages && vitest"
+    "test:watch": "npm run build:packages && vitest",
+    "postinstall": "node scripts/prepare-pty.mjs"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

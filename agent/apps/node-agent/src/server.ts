@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import {
+  nodeTerminalRequestSchema,
   executionRequestSchema,
   nodeModelSelectionSchema,
   addProjectSchema,
@@ -9,9 +10,11 @@ import {
 } from "@agent/contracts";
 import type { NodeConfig } from "./config.js";
 import { Executions, RequestError } from "./executions.js";
+import type { Terminals } from "./terminals.js";
 import type { Projects } from "./projects.js";
 export interface ServerDependencies {
   projects?: Projects;
+  terminals?: Terminals;
   executions: Executions;
   hardware: Hardware;
   nodeId: string;
@@ -85,6 +88,28 @@ export function createNodeServer(
         throw new RequestError(401, "unauthorized");
       if (!dependencies)
         throw new RequestError(503, "execution_not_configured");
+      if (
+        pathname === "/v1/node/terminals" &&
+        request.method === "POST" &&
+        dependencies.terminals
+      ) {
+        if (draining) throw new RequestError(503, "draining");
+        const input = nodeTerminalRequestSchema.safeParse(await body(request));
+        if (!input.success)
+          throw new RequestError(400, "invalid_terminal_request");
+        const command = input.data;
+        if (command.action === "list")
+          return send(200, await dependencies.terminals.list(command.scope));
+        if (command.action === "create")
+          return send(
+            201,
+            await dependencies.terminals.create(command.scope, command.input),
+          );
+        return send(
+          200,
+          await dependencies.terminals.end(command.scope, command.sessionId),
+        );
+      }
       if (pathname === "/v1/node/projects" && dependencies.projects) {
         if (request.method === "GET")
           return send(200, dependencies.projects.list());
@@ -157,6 +182,9 @@ export function createNodeServer(
       else response.end();
     });
   });
+  dependencies?.terminals?.install(server, (value) =>
+    authenticated(value, config.sharedToken),
+  );
   server.requestTimeout = 15_000;
   server.headersTimeout = 10_000;
   return {

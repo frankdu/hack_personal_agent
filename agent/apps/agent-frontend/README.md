@@ -34,3 +34,13 @@ Run `npm test --workspace @agent/agent-frontend` for output deduplication, pinne
 Add components using `npm run ui:add --workspace @agent/agent-frontend -- <component>`. `components.json` configures the Tailwind v4 stylesheet and source aliases.
 
 Setup references: [TanStack Start](https://tanstack.com/start/latest/docs/framework/react/build-from-scratch), [Node deployment](https://tanstack.com/start/latest/docs/framework/react/guide/hosting), [shadcn installation](https://ui.shadcn.com/docs/installation/tanstack-router).
+
+## Open a machine terminal
+
+1. Open the frontend, then **MANAGE FLEET → Connection settings** and connect with the backend URL and operator `API_TOKEN`.
+2. Open **My cloud**, find an online node, and click **Open terminal**.
+3. Select its workspace or a registered project and **Persistent (tmux)**, then **New terminal**. If tmux is unavailable, explicitly select **Temporary (ends on disconnect)**.
+4. Type directly in the terminal. Resize the browser to resize the PTY. Use **Detach terminal** or hide the panel to detach; persistent commands keep running.
+5. After a refresh, reconnect to the backend and reopen the node panel. Select **Reconnect** for the existing session. **Take over** explicitly moves an attached tmux session from another tab. **End session** terminates it, or shows `ending` until an offline node is reachable.
+
+Terminals use xterm.js with dynamically loaded terminal code. They do not require a model and remain available while inference is unavailable. Each panel labels host/container scope, OS user, persistence, idle/absolute expiry, and session limits. Losing a WebSocket never replays input or reconnects automatically. **Disconnect** revokes the current browser connection's tickets and detaches its writers; tmux sessions retain their configured expiry.

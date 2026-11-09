@@ -1,13 +1,14 @@
 # syntax=docker/dockerfile:1
 FROM node:24-trixie-slim AS dependencies
 WORKDIR /workspace
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 COPY apps/agent-frontend/package.json apps/agent-frontend/package.json
 COPY apps/node-agent/package.json apps/node-agent/package.json
 COPY apps/agent-backend/package.json apps/agent-backend/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
+COPY scripts/prepare-pty.mjs scripts/prepare-pty.mjs
 RUN npm ci
 COPY . .
 
@@ -43,10 +44,10 @@ CMD ["node", "apps/agent-backend/dist/index.js"]
 
 FROM node:24-trixie-slim AS node-production
 WORKDIR /workspace
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git tmux \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /data /work && chown node:node /data /work
-ENV NODE_ENV=production MODE=PROD HOST=0.0.0.0 PORT=3101
+ENV NODE_ENV=production MODE=PROD HOST=0.0.0.0 PORT=3101 CURILO_CONTAINER=true
 COPY --from=production-dependencies --chown=node:node /workspace/node_modules ./node_modules
 COPY --from=build --chown=node:node /workspace/package.json ./package.json
 COPY --from=build --chown=node:node /workspace/apps/node-agent ./apps/node-agent

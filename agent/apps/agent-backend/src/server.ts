@@ -18,6 +18,7 @@ import {
 } from "@agent/contracts";
 import type { Config } from "./config.js";
 import { ApiError } from "./errors.js";
+import { TerminalRelay } from "./terminals.js";
 import { Store } from "./store.js";
 import { Dispatcher } from "./dispatcher.js";
 
@@ -99,6 +100,8 @@ export async function startBackend(
       }
     });
   });
+  const terminals = new TerminalRelay(config, store);
+  terminals.install(server);
   server.requestTimeout = 15_000;
   server.headersTimeout = 10_000;
   async function handle(
@@ -172,6 +175,16 @@ export async function startBackend(
     }
     if (!authorized(req, config.apiToken))
       throw new ApiError(401, "UNAUTHORIZED", "User bearer token required.");
+    if (
+      await terminals.handle(
+        req,
+        res,
+        path,
+        () => body(req),
+        (status, data) => json(res, status, data),
+      )
+    )
+      return;
     if (req.method === "GET" && path === "/v1/nodes") {
       json(res, 200, { nodes: (await store.nodes()).map((n) => n.node) });
       return;
@@ -359,6 +372,7 @@ export async function startBackend(
       server.listen(config.port, config.host, resolve);
     });
   } catch (error) {
+    terminals.close();
     await store.pool.end();
     throw error;
   }
@@ -368,6 +382,7 @@ export async function startBackend(
     store,
     dispatcher,
     async close() {
+      terminals.close();
       for (const stream of streams) stream.end();
       const closed = new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),

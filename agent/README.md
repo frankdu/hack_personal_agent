@@ -2,7 +2,7 @@
 
 Work from this directory (`agent/`). [HANDOFF.md](HANDOFF.md) preserves the compact project context. The [research documents](research-docs/README.md) describe the target system; [IMPLEMENTATION.md](IMPLEMENTATION.md) tracks implemented behavior and remaining acceptance work.
 
-The latest [system design refinement](SYSTEM_DESIGN.md) separates always-on node control from optional inference, adds login-gated Codex/Claude discovery, restricts managed deployments to explicitly selected NVIDIA/Gemma 4 profiles, and specifies browser PTY/tmux sessions. These are planned changes; implemented behavior below remains unchanged.
+The latest [system design refinement](SYSTEM_DESIGN.md) separates always-on node control from optional inference, adds login-gated Codex/Claude discovery, restricts managed deployments to explicitly selected NVIDIA/Gemma 4 profiles, and specifies browser PTY/tmux sessions. Browser PTY/tmux sessions are implemented; provider/service separation and deployment changes remain planned.
 
 ## Implemented path
 
@@ -43,6 +43,12 @@ Coding tools (`read,bash,edit,write,grep,find,ls`) are enabled by default in the
 `npm run dev:backend` and `npm run dev:node` load `.env` independently. `npm run dev:frontend` starts only Vite; pass `FRONTEND_PORT=3300` when running it separately. Migrations run at backend startup under an advisory lock, or explicitly with `npm run db:migrate`. Set `AUTO_MIGRATE=false` after applying them separately if deployment roles require it.
 
 Run the macOS node natively for Metal. To connect a containerized backend to a native node, use `NODE_ENDPOINT=http://host.docker.internal:3101` and bind the node's `HOST=0.0.0.0` on a trusted development network. That endpoint must be in the backend allowlist.
+
+## Browser terminal
+
+Open **My cloud → Open terminal** on an online node, choose a workspace, then **New terminal**. Install `tmux` on that machine for sessions that keep running after browser disconnects. Without tmux, explicitly select **Temporary (ends on disconnect)**. Reconnect to existing sessions after refresh, use **Take over** to move an attached tmux session from another tab, and **End session** to terminate it. Shell access works without a ready model and runs with the node OS user's permissions. Host and container shells are labeled separately.
+
+Configure session limits and expiry with the `TERMINAL_*` settings in the [node README](apps/node-agent/README.md#browser-terminals). See the [frontend steps](apps/agent-frontend/README.md#open-a-machine-terminal) and [relay security and transport requirements](apps/agent-backend/README.md#terminal-relay). Existing dev services must be started from this implementation's worktree to expose the feature.
 
 ## Docker Compose
 

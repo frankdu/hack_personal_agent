@@ -4,7 +4,7 @@ The main working directory is `agent/`. The first colocated implementation is in
 
 ## Latest design refinement
 
-The [node services and terminal design](SYSTEM_DESIGN.md) supersedes older deployment assumptions below: always-on control/discovery/shell, optional inference, authenticated Codex/Claude models, externally owned Ollama/vLLM, explicit NVIDIA-only Gemma 4 deployments, and browser PTY/tmux. This was a documentation-only update; runtime behavior and protocol code have not changed. Follow T26–T30 and the amended T05/T09/T25 work before claiming these features exist.
+The [node services and terminal design](SYSTEM_DESIGN.md) supersedes older deployment assumptions below: always-on control/discovery/shell, optional inference, authenticated Codex/Claude models, externally owned Ollama/vLLM, explicit NVIDIA-only Gemma 4 deployments, and browser PTY/tmux. Browser terminal work T28/T30 now exists: node-pty/tmux, authenticated WebSocket relay, durable metadata/end intent, and xterm.js fleet controls. T26/T27/T29 provider/service/deployment work remains planned. See IMPLEMENTATION.md and the app READMEs.
 
 ## Prior milestone decisions (implementation baseline)
 

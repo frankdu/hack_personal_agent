@@ -14,6 +14,7 @@ import { PiExecutor } from "./pi-session.js";
 import { Enrollment } from "./enrollment.js";
 import { Executions, RequestError } from "./executions.js";
 import { createNodeServer } from "./server.js";
+import { Terminals } from "./terminals.js";
 import { Projects } from "./projects.js";
 async function acquire(stateDir: string, bootId: string) {
   const path = join(stateDir, "owner.lock");
@@ -66,6 +67,7 @@ export async function startNode(config: NodeConfig = readConfig()) {
   let discovery: OllamaDiscovery | undefined;
   let enrollment: Enrollment | undefined;
   let executions: Executions | undefined;
+  let terminals: Terminals | undefined;
   try {
     const projects = new Projects(config);
     await projects.initialize();
@@ -125,13 +127,25 @@ export async function startNode(config: NodeConfig = readConfig()) {
       },
     );
     await executions.initialize();
-    enrollment.onLeaseLost = () => executions!.abort("lease_lost");
+    terminals = new Terminals(
+      config,
+      nodeId,
+      bootId,
+      () => enrollment!.current(),
+      projects,
+    );
+    await terminals.initialize();
+    enrollment.onLeaseLost = () => {
+      executions!.abort("lease_lost");
+      terminals!.revoke();
+    };
     if (runtime)
       runtime.onUnavailable = () => executions!.abort("runtime_unavailable");
     if (discovery)
       discovery.onUnavailable = () => executions!.abort("runtime_unavailable");
     const { server, drain } = createNodeServer(config, {
       projects,
+      terminals,
       executions,
       hardware,
       nodeId,
@@ -174,6 +188,7 @@ export async function startNode(config: NodeConfig = readConfig()) {
       closing = true;
       drain();
       try {
+        await terminals!.close();
         await executions!.close();
         await Promise.allSettled([
           enrollment!.close(),
@@ -194,6 +209,7 @@ export async function startNode(config: NodeConfig = readConfig()) {
       nodeId,
       bootId,
       executions,
+      terminals,
       runtime,
       discovery,
       enrollment,
@@ -201,6 +217,7 @@ export async function startNode(config: NodeConfig = readConfig()) {
       started: starting,
     };
   } catch (error) {
+    await terminals?.close().catch(() => {});
     await discovery?.close().catch(() => {});
     await runtime?.close().catch(() => {});
     await enrollment?.close();

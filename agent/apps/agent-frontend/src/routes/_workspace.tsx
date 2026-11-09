@@ -45,6 +45,7 @@ import {
   Unplug,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { NodeTerminal } from "@/components/node-terminal";
 import { WorkspaceList } from "@/components/workspace-list";
 import { ConversationList } from "@/components/conversation-list";
 import { ChatMessage } from "@/components/chat-message";
@@ -121,6 +122,13 @@ function Workspace() {
   }
 
   function disconnect() {
+    if (connection)
+      void apiRequest(
+        connection,
+        `/v1/terminal-connections/${connection.id}`,
+        { parse: (value) => value },
+        { method: "DELETE" },
+      ).catch(() => {});
     connectAttempt.current?.abort();
     setConnecting(false);
     setConnection(null);
@@ -717,6 +725,7 @@ function ChatWorkspace({
                   <NodeCard
                     key={node.nodeId}
                     node={node}
+                    connection={connection!}
                     pinned={routing === node.nodeId}
                     onPin={() => setRouting(node.nodeId)}
                     onSelectModel={(profileId) =>
@@ -1143,12 +1152,14 @@ function ChatWorkspace({
 
 function NodeCard({
   node,
+  connection,
   pinned,
   onPin,
   onSelectModel,
   disabled,
 }: {
   node: FleetNode;
+  connection: Connection;
   pinned: boolean;
   onPin: () => void;
   onSelectModel: (profileId: string) => Promise<void>;
@@ -1251,6 +1262,7 @@ function NodeCard({
       </p>
       <p className="node-tools">Workspaces: {node.workspaceIds.join(", ")}</p>
       <p className="node-tools">Active tasks: {node.activeAttempts.length}</p>
+      <NodeTerminal node={node} connection={connection} />
       <Button
         type="button"
         variant={pinned ? "default" : "outline"}
