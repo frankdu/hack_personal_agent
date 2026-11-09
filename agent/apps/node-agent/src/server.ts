@@ -3,11 +3,15 @@ import { timingSafeEqual } from "node:crypto";
 import {
   executionRequestSchema,
   nodeModelSelectionSchema,
+  addProjectSchema,
+  projectTreeQuerySchema,
   type Hardware,
 } from "@agent/contracts";
 import type { NodeConfig } from "./config.js";
 import { Executions, RequestError } from "./executions.js";
+import type { Projects } from "./projects.js";
 export interface ServerDependencies {
+  projects?: Projects;
   executions: Executions;
   hardware: Hardware;
   nodeId: string;
@@ -52,7 +56,8 @@ export function createNodeServer(
       response.end(JSON.stringify(data));
     };
     void (async () => {
-      const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+      const url = new URL(request.url ?? "/", "http://localhost");
+      const pathname = url.pathname;
       if (request.method === "GET" && pathname === "/health/live")
         return send(draining ? 503 : 200, {
           status: draining ? "draining" : "alive",
@@ -80,6 +85,35 @@ export function createNodeServer(
         throw new RequestError(401, "unauthorized");
       if (!dependencies)
         throw new RequestError(503, "execution_not_configured");
+      if (pathname === "/v1/node/projects" && dependencies.projects) {
+        if (request.method === "GET")
+          return send(200, dependencies.projects.list());
+        if (request.method === "POST") {
+          const input = addProjectSchema.safeParse(await body(request));
+          if (!input.success) throw new RequestError(400, "invalid_project");
+          return send(
+            200,
+            await dependencies.projects.add(input.data.directory),
+          );
+        }
+      }
+      const tree = /^\/v1\/node\/projects\/([a-f0-9]{64})\/tree$/.exec(
+        pathname,
+      );
+      if (tree && request.method === "GET" && dependencies.projects) {
+        const input = projectTreeQuerySchema.safeParse(
+          Object.fromEntries(url.searchParams),
+        );
+        if (!input.success) throw new RequestError(400, "invalid_tree_query");
+        return send(
+          200,
+          await dependencies.projects.tree(
+            tree[1]!,
+            input.data.path,
+            input.data.offset,
+          ),
+        );
+      }
       if (request.method === "POST" && pathname === "/v1/node/model") {
         if (draining) throw new RequestError(503, "draining");
         const parsed = nodeModelSelectionSchema.safeParse(await body(request));

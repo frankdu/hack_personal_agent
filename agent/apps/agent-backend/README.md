@@ -39,3 +39,7 @@ Events are persisted in PostgreSQL and replayed by `GET /v1/conversations/:id/ev
 ## Tests
 
 `npm test -w @agent/agent-backend` runs configuration/routing/provider tests without live inference. Set `TEST_DATABASE_URL` to an expendable PostgreSQL database to also run integration checks. The suite creates and drops a uniquely named schema; it never drops the database or public schema. It verifies audit-before-send, idempotency, scope separation, CORS, leases, event replay and conservative unknown outcomes.
+
+## Project browsing
+
+Operator-authenticated `GET /v1/nodes/:nodeId/projects`, `POST /v1/nodes/:nodeId/projects` with `{directory}`, and `GET /v1/nodes/:nodeId/projects/:projectId/tree?path=.&offset=0` relay to the enrolled node. The backend rejects offline nodes and destinations outside its endpoint allowlist, bounds upstream requests/responses, and validates project/tree schemas. The browser never receives the node credential. Paths appear only in authenticated project responses, not public node status. The node owns project-root persistence and enforces traversal, private-state and symlink checks.

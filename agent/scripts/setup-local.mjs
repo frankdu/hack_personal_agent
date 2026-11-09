@@ -20,7 +20,7 @@ NODE_ENDPOINT_ALLOWLIST=http://127.0.0.1:3101,http://node-agent:3101,http://host
 FRONTEND_ORIGINS=http://localhost:3300,http://127.0.0.1:3300,http://localhost:3000,http://127.0.0.1:3000
 JEV_API_KEY=
 # RUNTIME_CONFIG=/absolute/path/to/operator-approved-runtime.json
-# Unset or blank defaults to <process cwd>/default-chat-workspace (created at startup).
+# Unset or blank uses ~/.curilo/workspace/chat_sessions/<conversation-id> (created as needed).
 # AGENT_WORKSPACE_DIR=/absolute/path/to/project
 # All coding tools are enabled by default. Set ENABLED_TOOLS= to disable all.
 # ENABLED_TOOLS=read,bash,edit,write,grep,find,ls

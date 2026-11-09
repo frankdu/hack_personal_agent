@@ -1,5 +1,5 @@
-import { mkdir, realpath } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import {
   createAgentSession,
   createExtensionRuntime,
@@ -21,6 +21,7 @@ import type { NodeConfig } from "./config.js";
 import type { RuntimeManifest } from "./runtime.js";
 import { ExecutionError, type Executor, type RunHooks } from "./executions.js";
 import { localModelPayload } from "./model-payload.js";
+import { assertWorkspacePath, executionWorkspace } from "./workspace.js";
 
 export function isolatedResources(
   allowedTools: readonly EnabledTool[] = [],
@@ -49,46 +50,7 @@ export function isolatedResources(
     reload: async () => {},
   };
 }
-export async function assertWorkspacePath(
-  root: string,
-  path: unknown,
-  forbiddenRoot?: string,
-): Promise<void> {
-  if (typeof path !== "string") throw new Error("Tool path is required");
-  const canonicalRoot = await realpath(root);
-  const requested = resolve(canonicalRoot, path);
-  let existing = requested;
-  while (true) {
-    try {
-      existing = await realpath(existing);
-      break;
-    } catch (error) {
-      if (
-        (error as NodeJS.ErrnoException).code !== "ENOENT" ||
-        dirname(existing) === existing
-      )
-        throw error;
-      existing = dirname(existing);
-    }
-  }
-  for (const candidate of [requested, existing]) {
-    const inside = relative(canonicalRoot, candidate);
-    if (
-      inside === ".." ||
-      inside.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) ||
-      isAbsolute(inside)
-    )
-      throw new Error("Tool path is outside the approved workspace");
-    if (forbiddenRoot) {
-      const forbidden = relative(await realpath(forbiddenRoot), candidate);
-      if (
-        forbidden === "" ||
-        (!forbidden.startsWith("..") && !isAbsolute(forbidden))
-      )
-        throw new Error("Tool path is inside private node state");
-    }
-  }
-}
+export { assertWorkspacePath } from "./workspace.js";
 export class PiExecutor implements Executor {
   constructor(
     private readonly config: NodeConfig,
@@ -104,6 +66,10 @@ export class PiExecutor implements Executor {
       recursive: true,
       mode: 0o700,
     });
+    const workspaceDir = await executionWorkspace(
+      this.config,
+      request.conversationId,
+    );
     const modelRuntime = await ModelRuntime.create({
       authPath: join(this.config.stateDir, "auth.json"),
       modelsPath: null,
@@ -139,7 +105,7 @@ export class PiExecutor implements Executor {
     const model = modelRuntime.getModel(provider, this.manifest.modelId);
     if (!model) throw new Error("Local runtime model was not registered");
     const manager = SessionManager.create(
-      this.config.workspaceDir,
+      workspaceDir,
       join(this.config.stateDir, "sessions"),
     );
     for (const message of request.messages.slice(0, -1)) {
@@ -187,7 +153,7 @@ export class PiExecutor implements Executor {
       (name) => {
         const tool = (
           name === "bash"
-            ? createBashToolDefinition(this.config.workspaceDir, {
+            ? createBashToolDefinition(workspaceDir, {
                 exposeSessionEnvironment: false,
                 spawnHook: (context) => ({
                   ...context,
@@ -197,7 +163,7 @@ export class PiExecutor implements Executor {
                   },
                 }),
               })
-            : factories[name](this.config.workspaceDir)
+            : factories[name](workspaceDir)
         ) as ToolDefinition<any, any>;
         return {
           ...tool,
@@ -206,7 +172,7 @@ export class PiExecutor implements Executor {
             signal.throwIfAborted();
             if (name !== "bash")
               await assertWorkspacePath(
-                this.config.workspaceDir,
+                workspaceDir,
                 (input as { path?: unknown }).path ?? ".",
                 this.config.stateDir,
               );
@@ -218,7 +184,7 @@ export class PiExecutor implements Executor {
       },
     );
     const { session } = await createAgentSession({
-      cwd: this.config.workspaceDir,
+      cwd: workspaceDir,
       agentDir: this.config.stateDir,
       modelRuntime,
       model,

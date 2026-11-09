@@ -10,6 +10,11 @@ import {
   submitMessageSchema,
   modelSelectionSchema,
   deleteMessageSchema,
+  addProjectSchema,
+  projectSchema,
+  projectsResponseSchema,
+  projectTreeQuerySchema,
+  projectTreeResponseSchema,
 } from "@agent/contracts";
 import type { Config } from "./config.js";
 import { ApiError } from "./errors.js";
@@ -172,6 +177,52 @@ export async function startBackend(
       return;
     }
     const nodeModel = path.match(new RegExp(`^/v1/nodes/(${uuid})/model$`));
+    const projects = path.match(new RegExp(`^/v1/nodes/(${uuid})/projects$`));
+    if (projects && req.method === "GET") {
+      json(
+        res,
+        200,
+        projectsResponseSchema.parse(
+          await store.projectRequest(projects[1]!, "", "GET"),
+        ),
+      );
+      return;
+    }
+    if (projects && req.method === "POST") {
+      const input = addProjectSchema.parse(await body(req));
+      json(
+        res,
+        200,
+        projectSchema.parse(
+          await store.projectRequest(projects[1]!, "", "POST", input),
+        ),
+      );
+      return;
+    }
+    const tree = path.match(
+      new RegExp(`^/v1/nodes/(${uuid})/projects/([a-f0-9]{64})/tree$`),
+    );
+    if (tree && req.method === "GET") {
+      const query = projectTreeQuerySchema.parse(
+        Object.fromEntries(new URL(req.url!, "http://localhost").searchParams),
+      );
+      const search = new URLSearchParams({
+        path: query.path,
+        offset: String(query.offset),
+      });
+      json(
+        res,
+        200,
+        projectTreeResponseSchema.parse(
+          await store.projectRequest(
+            tree[1]!,
+            `/${tree[2]}/tree?${search}`,
+            "GET",
+          ),
+        ),
+      );
+      return;
+    }
     if (req.method === "POST" && nodeModel) {
       const input = modelSelectionSchema.parse(await body(req));
       json(res, 202, await store.selectModel(nodeModel[1]!, input.profileId));

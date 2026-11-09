@@ -150,3 +150,11 @@ This update changes design only. Existing automatic Ollama benchmarking/selectio
 | T30     | xterm.js browser terminal and session controls                                                | Resize, detach/reconnect/end, writer takeover, denied attachment and no keystroke replay          |
 
 Expand shared contracts and PostgreSQL migrations first. Add provider/service state next; implement native-provider sessions and shell brokerage against those contracts. Deployment UI follows the amended catalog/supervisor; browser terminal UI follows the broker. Retain existing task IDs and amend T05/T09/T25 for NVIDIA-only explicit deployment. Full dependencies and proposed endpoint/storage additions are maintained in the local [research backlog](./research-docs/implementation-tasks.md) and [API design](./research-docs/backend-routing.md).
+
+## Chat working directories and project trees
+
+Implemented refinement: with no nonempty `AGENT_WORKSPACE_DIR`, a chat's working directory is `~/.curilo/workspace/chat_sessions/<conversation-id>` on the selected node. The conversation ID is the stable session ID; follow-up turns reuse its files and separate conversations use separate directories. An explicit configured project remains the task workspace. Files from the earlier default directory are not moved automatically.
+
+The node automatically publishes the parent as **chat_sessions** under **Projects@<node name>**, using directory basenames as display names. Projects form an expandable tree of directories and file names, loaded one directory at a time. Operator-added project roots persist on the node; older browser entries are imported. Browse registration is distinct from permission to execute model tools in that root.
+
+Authenticated backend project APIs relay to enrolled, allowlisted online nodes. The node returns at most 200 directory entries per page with an offset for more; expanded frontend branches refresh every three seconds. Only approved project roots can be listed. Paths cannot escape a root, private node state is excluded, and symbolic links appear as nonexpandable leaves. This is a directory browser, not a file editor or filesystem synchronization mechanism.

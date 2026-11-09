@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createServer, type ServerResponse } from "node:http";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "vitest";
@@ -36,6 +43,7 @@ function stream(
 
 async function fixture(
   respond: (body: any, res: ServerResponse, call: number) => void,
+  defaultWorkspace = false,
 ) {
   const dir = await mkdtemp(join(tmpdir(), "pi-executor-"));
   const workspace = join(dir, "workspace");
@@ -54,12 +62,14 @@ async function fixture(
   });
   const address = server.address();
   assert.ok(address && typeof address !== "string");
+  const config = readConfig({
+    NODE_STATE_DIR: join(dir, "state"),
+    AGENT_WORKSPACE_DIR: workspace,
+    OLLAMA_AUTO_DISCOVER: "false",
+  });
+  config.workspaceDirIsDefault = defaultWorkspace;
   const executor = new PiExecutor(
-    readConfig({
-      NODE_STATE_DIR: join(dir, "state"),
-      AGENT_WORKSPACE_DIR: workspace,
-      OLLAMA_AUTO_DISCOVER: "false",
-    }),
+    config,
     parseRuntimeManifest({
       kind: "external",
       profileId: "test",
@@ -279,6 +289,64 @@ test("a truncated tool call is never executed or continued automatically", async
     assert.deepEqual(f.tools, []);
     assert.equal(f.bodies.length, 1);
     assert.equal(f.snapshots.at(-1), "I'll read the file.");
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("default chat tools use the conversation directory for writes and shell cwd", async () => {
+  const f = await fixture((_body, res, call) => {
+    if (call === 1)
+      stream(
+        res,
+        [
+          {
+            tool_calls: [
+              {
+                index: 0,
+                id: "write-chat",
+                type: "function",
+                function: {
+                  name: "write",
+                  arguments: JSON.stringify({
+                    path: "notes.txt",
+                    content: "session notes",
+                  }),
+                },
+              },
+              {
+                index: 1,
+                id: "pwd-chat",
+                type: "function",
+                function: {
+                  name: "bash",
+                  arguments: JSON.stringify({ command: "pwd" }),
+                },
+              },
+            ],
+          },
+        ],
+        "tool_calls",
+      );
+    else stream(res, [{ content: "Saved in this chat's workspace." }]);
+  }, true);
+  f.request.allowedTools = ["write", "bash"];
+  try {
+    assert.equal(await f.run(), "Saved in this chat's workspace.");
+    const directory = join(
+      await realpath(f.workspace),
+      f.request.conversationId,
+    );
+    assert.equal(
+      await readFile(join(directory, "notes.txt"), "utf8"),
+      "session notes",
+    );
+    assert.ok(
+      f.bodies[1].messages.some(
+        (message: any) =>
+          message.role === "tool" && message.content.includes(directory),
+      ),
+    );
   } finally {
     await f.cleanup();
   }

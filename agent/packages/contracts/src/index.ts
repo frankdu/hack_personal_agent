@@ -36,6 +36,53 @@ export const routingPreferenceSchema = z.discriminatedUnion("mode", [
 export type RoutingPreference = z.infer<typeof routingPreferenceSchema>;
 
 export const PROTOCOL_VERSION = "1" as const;
+export const projectSchema = z
+  .object({
+    id: z.string().regex(/^[a-f0-9]{64}$/),
+    name: z.string().min(1).max(4096),
+    directory: z.string().min(1).max(4096),
+    source: z.enum(["chat_sessions", "configured", "added"]),
+  })
+  .strict();
+export type Project = z.infer<typeof projectSchema>;
+export const projectsResponseSchema = z
+  .object({
+    projects: z.array(projectSchema).max(256),
+  })
+  .strict();
+export const addProjectSchema = z
+  .object({
+    directory: z
+      .string()
+      .trim()
+      .min(1)
+      .max(4096)
+      .refine((v) => !/[\0\r\n]/.test(v)),
+  })
+  .strict();
+export const projectTreeQuerySchema = z
+  .object({
+    path: z.string().max(4096).default("."),
+    offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
+  })
+  .strict();
+export const projectTreeResponseSchema = z
+  .object({
+    entries: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1).max(4096),
+            path: z.string().min(1).max(4096),
+            kind: z.enum(["directory", "file", "symlink", "other"]),
+          })
+          .strict(),
+      )
+      .max(200),
+    nextOffset: z.number().int().nonnegative().nullable(),
+  })
+  .strict();
+export type ProjectTree = z.infer<typeof projectTreeResponseSchema>;
 const id = z.string().uuid();
 const time = z.string().datetime();
 export const hardwareSchema = z.object({

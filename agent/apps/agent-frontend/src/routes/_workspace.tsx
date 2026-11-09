@@ -613,7 +613,7 @@ function ChatWorkspace({
         <WorkspaceList
           key={connection?.baseUrl ?? "disconnected"}
           nodes={nodes}
-          backendUrl={connection?.baseUrl ?? null}
+          connection={connection}
           loading={!!connection && nodesQuery.isPending}
           error={nodesQuery.error ? errorText(nodesQuery.error) : null}
         />

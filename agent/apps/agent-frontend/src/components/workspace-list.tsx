@@ -1,76 +1,49 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { FleetNode } from "@agent/contracts";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  projectsResponseSchema,
+  projectSchema,
+  type FleetNode,
+} from "@agent/contracts";
 import { FolderCode, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   parseRepositories,
-  repositoryDetails,
   type WorkspaceRepository,
 } from "@/lib/workspace-repositories";
+import { apiRequest, errorText, type Connection } from "@/lib/api";
+import { ProjectTree } from "@/components/project-tree";
 
 export function WorkspaceList({
   nodes,
-  backendUrl,
+  connection,
   loading,
   error,
 }: {
   nodes: FleetNode[];
-  backendUrl: string | null;
+  connection: Connection | null;
   loading: boolean;
   error: string | null;
 }) {
-  const storageKey = `curilo:workspace-repositories:${backendUrl}`;
-  const [repositories, setRepositories] = useState<
-    WorkspaceRepository[] | null
-  >(null);
-  const [storageError, setStorageError] = useState("");
+  const queryClient = useQueryClient();
   const [addingNode, setAddingNode] = useState<FleetNode | null>(null);
-
-  function loadRepositories() {
-    try {
-      setRepositories(parseRepositories(localStorage.getItem(storageKey)));
-      setStorageError("");
-    } catch {
-      setStorageError("Could not load saved code repos from this browser.");
-    }
-  }
-
-  useEffect(() => {
-    if (backendUrl) loadRepositories();
-  }, [storageKey]);
-
-  function addRepository(nodeId: string, directory: string) {
-    if (!repositories) throw new Error("Saved code repos are not available.");
-    const repository = { nodeId, ...repositoryDetails(directory) };
-    if (
-      repositories.some(
-        (item) =>
-          item.nodeId === nodeId &&
-          item.directory !== undefined &&
-          item.directory.replace(/[\\/]+$/, "") ===
-            repository.directory.replace(/[\\/]+$/, ""),
-      )
-    ) {
-      throw new Error(
-        "This code repo has already been added to this workspace.",
-      );
-    }
-    const next = [...repositories, repository];
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(next));
-    } catch {
-      throw new Error(
-        "Could not save the code repo. Check browser storage access.",
-      );
-    }
-    setRepositories(next);
+  async function addRepository(nodeId: string, directory: string) {
+    if (!connection) return;
+    await apiRequest(
+      connection,
+      `/v1/nodes/${nodeId}/projects`,
+      projectSchema,
+      { method: "POST", body: { directory } },
+    );
+    await queryClient.invalidateQueries({
+      queryKey: ["projects", connection.id, nodeId],
+    });
     setAddingNode(null);
   }
-
   return (
     <section className="workspace-navigation" aria-label="Workspaces">
       <div className="sidebar-label">WORKSPACE</div>
-      {!backendUrl ? (
+      {!connection ? (
         <p className="workspace-note">
           Connect your backend to see workspaces.
         </p>
@@ -86,78 +59,25 @@ export function WorkspaceList({
           {error}
         </p>
       )}
-      {storageError && (
-        <div className="workspace-list-error" role="alert">
-          {storageError} <button onClick={loadRepositories}>Retry</button>
-        </div>
-      )}
       <ul className="workspace-list">
-        {nodes.map((node) => {
-          const repos = repositories?.filter(
-            (repo) => repo.nodeId === node.nodeId,
-          );
-          return (
-            <li key={node.nodeId}>
-              <div className="workspace-node-heading">
-                <span title={`Projects@${node.name}`}>
-                  Projects@{node.name}
-                </span>
-                <button
-                  type="button"
-                  className="workspace-add"
-                  aria-label={`Add code repo to Projects@${node.name}`}
-                  title="Add a code repo"
-                  disabled={!repositories || !!error}
-                  onClick={() => setAddingNode(node)}
-                >
-                  <Plus size={15} aria-hidden="true" />
-                </button>
-              </div>
-              {repos?.length ? (
-                <ul className="repository-list">
-                  {repos.map((repo) => {
-                    const content = (
-                      <>
-                        <FolderCode size={14} aria-hidden="true" />
-                        <span>{repo.name}</span>
-                      </>
-                    );
-                    return (
-                      <li key={repo.directory ?? repo.url}>
-                        {repo.directory !== undefined ? (
-                          <div
-                            className="repository-entry"
-                            title={repo.directory}
-                          >
-                            {content}
-                          </div>
-                        ) : (
-                          <a
-                            className="repository-entry"
-                            href={repo.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            title={repo.url}
-                          >
-                            {content}
-                          </a>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : (
-                <p className="workspace-note">
-                  {repositories
-                    ? "Click + to add a code repo"
-                    : storageError
-                      ? "Code repos unavailable."
-                      : "Loading code repos…"}
-                </p>
-              )}
-            </li>
-          );
-        })}
+        {nodes.map((node) => (
+          <li key={node.nodeId}>
+            <div className="workspace-node-heading">
+              <span title={`Projects@${node.name}`}>Projects@{node.name}</span>
+              <button
+                type="button"
+                className="workspace-add"
+                aria-label={`Add code repo to Projects@${node.name}`}
+                title="Add a code repo"
+                disabled={!connection || node.status !== "online" || !!error}
+                onClick={() => setAddingNode(node)}
+              >
+                <Plus size={15} aria-hidden="true" />
+              </button>
+            </div>
+            {connection && <NodeProjects node={node} connection={connection} />}
+          </li>
+        ))}
       </ul>
       {addingNode && (
         <RepositoryDialog
@@ -170,32 +90,164 @@ export function WorkspaceList({
   );
 }
 
+function NodeProjects({
+  node,
+  connection,
+}: {
+  node: FleetNode;
+  connection: Connection;
+}) {
+  const queryClient = useQueryClient();
+  const [migrationError, setMigrationError] = useState("");
+  const [links, setLinks] = useState<WorkspaceRepository[]>([]);
+  // Preserve directories saved by older clients, without making browser storage
+  // a prerequisite for the node's automatic chat_sessions project.
+  useEffect(() => {
+    if (node.status !== "online") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const saved = parseRepositories(
+          localStorage.getItem(
+            `curilo:workspace-repositories:${connection.baseUrl}`,
+          ),
+        ).filter((project) => project.nodeId === node.nodeId);
+        if (!cancelled) setLinks(saved.filter((project) => project.url));
+        const results = await Promise.allSettled(
+          saved
+            .filter((p) => p.directory !== undefined)
+            .map((p) =>
+              apiRequest(
+                connection,
+                `/v1/nodes/${node.nodeId}/projects`,
+                projectSchema,
+                { method: "POST", body: { directory: p.directory } },
+              ),
+            ),
+        );
+        if (!cancelled && results.some((r) => r.status === "rejected"))
+          setMigrationError(
+            "Some saved project directories could not be imported. Add them again using +.",
+          );
+        if (!cancelled && results.length)
+          await queryClient.invalidateQueries({
+            queryKey: ["projects", connection.id, node.nodeId],
+          });
+      } catch {
+        if (!cancelled)
+          setMigrationError(
+            "Browser-saved projects could not be loaded. Node projects remain available.",
+          );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connection.id, node.nodeId, node.status]);
+  const projects = useQuery({
+    queryKey: ["projects", connection.id, node.nodeId],
+    queryFn: ({ signal }) =>
+      apiRequest(
+        connection,
+        `/v1/nodes/${node.nodeId}/projects`,
+        projectsResponseSchema,
+        { signal },
+      ),
+    enabled: node.status === "online",
+    refetchInterval: 5000,
+    retry: false,
+  });
+  return (
+    <>
+      {projects.isPending && (
+        <p className="workspace-note">
+          {node.status === "online" ? "Loading projects…" : "Node offline"}
+        </p>
+      )}
+      {projects.error && (
+        <p className="workspace-list-error" role="alert">
+          {errorText(projects.error)}{" "}
+          <button onClick={() => void projects.refetch()}>Retry</button>
+        </p>
+      )}
+      {migrationError && (
+        <p className="workspace-list-error" role="alert">
+          {migrationError}
+        </p>
+      )}
+      {projects.data && (
+        <ul
+          className="project-tree"
+          role="tree"
+          aria-label={`Projects on ${node.name}`}
+        >
+          {projects.data.projects.map((project) => (
+            <ProjectTree
+              key={project.id}
+              project={project}
+              nodeId={node.nodeId}
+              connection={connection}
+              online={node.status === "online"}
+            />
+          ))}
+        </ul>
+      )}
+      {projects.data?.projects.length === 0 && (
+        <p className="workspace-note">Click + to add a code repo</p>
+      )}
+      {links.length > 0 && (
+        <ul className="repository-list">
+          {links.map((link) => (
+            <li key={link.url}>
+              <a
+                className="repository-entry"
+                href={link.url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <FolderCode size={14} aria-hidden="true" />
+                <span>{link.name}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
 function RepositoryDialog({
   node,
   onAdd,
   onClose,
 }: {
   node: FleetNode;
-  onAdd: (directory: string) => void;
+  onAdd: (directory: string) => Promise<void>;
   onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const directoryInput = useRef<HTMLInputElement>(null);
   const [directory, setDirectory] = useState("");
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
     dialog.current?.showModal();
     directoryInput.current?.focus();
   }, []);
 
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    setError("");
     try {
-      onAdd(directory);
+      await onAdd(directory);
     } catch (error) {
       setError(
         error instanceof Error ? error.message : "Could not add the code repo.",
       );
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -234,7 +286,7 @@ function RepositoryDialog({
           required
           autoFocus
         />
-        <small>Directories are saved in this browser.</small>
+        <small>Directories are validated and saved on this node.</small>
         {error && (
           <p className="error-banner" role="alert">
             {error}
@@ -244,7 +296,9 @@ function RepositoryDialog({
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit">Add code repo</Button>
+          <Button type="submit" disabled={saving}>
+            {saving ? "Adding…" : "Add code repo"}
+          </Button>
         </div>
       </form>
     </dialog>

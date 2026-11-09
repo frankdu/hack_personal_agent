@@ -1322,3 +1322,64 @@ h1 {
     margin-left: 0;
   }
 }
+
+.project-tree,
+.project-tree-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.project-tree-children {
+  margin-left: 14px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+.project-tree-entry {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+button.project-tree-entry {
+  cursor: pointer;
+}
+.project-tree-entry:hover,
+.project-tree-entry:focus-visible {
+  background: #e5eadf;
+}
+.project-tree-entry:focus-visible {
+  outline: 2px solid #385f42;
+  outline-offset: -2px;
+}
+.project-tree-entry svg {
+  flex-shrink: 0;
+}
+.project-tree-entry > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-tree-file {
+  padding-left: 21px;
+}
+.project-root {
+  font-weight: 500;
+}
+.project-tree-more {
+  border: 0;
+  background: none;
+  padding: 5px;
+  color: #385f42;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}

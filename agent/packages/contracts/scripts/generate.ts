@@ -57,6 +57,76 @@ const document = {
   info: { title: "Curilo Agent protocol", version: contracts.PROTOCOL_VERSION },
   paths: {
     "/v1/nodes": { get: operation(null, "nodesResponseSchema") },
+    "/v1/nodes/{nodeId}/projects": {
+      parameters: [parameter("nodeId")],
+      get: operation(null, "projectsResponseSchema"),
+      post: operation("addProjectSchema", "projectSchema"),
+    },
+    "/v1/node/projects": {
+      get: operation(null, "projectsResponseSchema", true),
+      post: operation("addProjectSchema", "projectSchema", true),
+    },
+    "/v1/nodes/{nodeId}/projects/{projectId}/tree": {
+      parameters: [
+        parameter("nodeId"),
+        {
+          name: "projectId",
+          in: "path",
+          required: true,
+          schema: { type: "string", pattern: "^[a-f0-9]{64}$" },
+        },
+      ],
+      get: {
+        ...operation(null, "projectTreeResponseSchema"),
+        parameters: [
+          {
+            name: "path",
+            in: "query",
+            schema: { type: "string", default: ".", maxLength: 4096 },
+          },
+          {
+            name: "offset",
+            in: "query",
+            schema: {
+              type: "integer",
+              minimum: 0,
+              maximum: 1000000,
+              default: 0,
+            },
+          },
+        ],
+      },
+    },
+    "/v1/node/projects/{projectId}/tree": {
+      parameters: [
+        {
+          name: "projectId",
+          in: "path",
+          required: true,
+          schema: { type: "string", pattern: "^[a-f0-9]{64}$" },
+        },
+      ],
+      get: {
+        ...operation(null, "projectTreeResponseSchema", true),
+        parameters: [
+          {
+            name: "path",
+            in: "query",
+            schema: { type: "string", default: ".", maxLength: 4096 },
+          },
+          {
+            name: "offset",
+            in: "query",
+            schema: {
+              type: "integer",
+              minimum: 0,
+              maximum: 1000000,
+              default: 0,
+            },
+          },
+        ],
+      },
+    },
     "/v1/nodes/{nodeId}/model": {
       parameters: [parameter("nodeId")],
       post: operation(

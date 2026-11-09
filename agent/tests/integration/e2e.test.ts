@@ -9,6 +9,9 @@ import { setTimeout as delay } from "node:timers/promises";
 import {
   conversationSchema,
   nodesResponseSchema,
+  projectsResponseSchema,
+  projectSchema,
+  projectTreeResponseSchema,
   taskResponseSchema,
   taskSchema,
   type Task,
@@ -223,6 +226,28 @@ test(
         : undefined;
     });
     assert.equal(fleet[0]!.name, "Integration node");
+    const projectsPath = `/v1/nodes/${fleet[0]!.nodeId}/projects`;
+    assert.equal((await fetch(base + projectsPath)).status, 401);
+    const roots = projectsResponseSchema.parse((await api(projectsPath)).body);
+    assert.equal(roots.projects[0]!.name, "work");
+    const treePath = `${projectsPath}/${roots.projects[0]!.id}/tree`;
+    const listing = projectTreeResponseSchema.parse((await api(treePath)).body);
+    assert.ok(
+      listing.entries.some(
+        (entry) => entry.name === "fixture.txt" && entry.kind === "file",
+      ),
+    );
+    assert.equal((await api(`${treePath}?path=..`)).status, 403);
+    const projectDirectory = join(root, "added-project");
+    await mkdir(projectDirectory);
+    const added = projectSchema.parse(
+      (await api(projectsPath, { directory: projectDirectory })).body,
+    );
+    assert.equal(added.name, "added-project");
+    const secondAdd = projectSchema.parse(
+      (await api(projectsPath, { directory: projectDirectory })).body,
+    );
+    assert.equal(secondAdd.id, added.id);
     const conv = conversationSchema.parse(
       (await api("/v1/conversations", {})).body,
     );

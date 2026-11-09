@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { homedir } from "node:os";
 import { relative, isAbsolute, join, resolve } from "node:path";
 import { DEFAULT_CODING_TOOLS } from "@agent/contracts";
 import { test } from "vitest";
@@ -9,7 +10,7 @@ test("missing or blank project directories use a dedicated default chat workspac
     const config = readConfig({ AGENT_WORKSPACE_DIR: value });
     assert.equal(
       config.workspaceDir,
-      join(process.cwd(), "default-chat-workspace"),
+      join(homedir(), ".curilo", "workspace", "chat_sessions"),
     );
     assert.equal(config.workspaceDirIsDefault, true);
   }

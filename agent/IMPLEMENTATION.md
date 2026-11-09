@@ -21,6 +21,10 @@ The [node services and browser terminal refinement](SYSTEM_DESIGN.md) is design-
 | T23 operations        | DEV/PROD Compose with backend, native setup, deployment docs/builds                                                                                                             | TLS, service units, per-node credentials, backup/restore, release image digests                |
 | T24 split placement   | First milestone colocates inference/tools                                                                                                                                       | Separate placement and artifact authorization deferred                                         |
 
+## Chat workspaces and project tree
+
+Without a nonempty `AGENT_WORKSPACE_DIR`, execution now uses `~/.curilo/workspace/chat_sessions/<conversation-id>` consistently for Pi sessions, file tools and shell tools. The node auto-publishes `chat_sessions` under **Projects@<node name>**. Authenticated project APIs persist additional roots and serve paginated directory listings; the frontend renders lazy folder/file trees and imports legacy browser roots. Traversal, symlink expansion and private-state browsing are rejected. Explicit project configuration remains authoritative for execution; adding a tree root does not change tool scope.
+
 ## Operating limits
 
 One trusted operator and one shared node credential per fleet are supported. Nodes in that trust boundary can authenticate as fleet nodes. The endpoint allowlist limits dispatch destinations; it is not per-node identity authentication.

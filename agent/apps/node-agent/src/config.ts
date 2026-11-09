@@ -131,7 +131,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): NodeConfig {
     ),
     workspaceDir: resolve(
       env.AGENT_WORKSPACE_DIR?.trim() ||
-        join(process.cwd(), "default-chat-workspace"),
+        join(homedir(), ".curilo", "workspace", "chat_sessions"),
     ),
     workspaceDirIsDefault: !env.AGENT_WORKSPACE_DIR?.trim(),
     enabledTools: [...new Set(requested)] as EnabledTool[],

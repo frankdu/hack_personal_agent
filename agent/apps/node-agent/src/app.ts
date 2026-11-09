@@ -14,6 +14,7 @@ import { PiExecutor } from "./pi-session.js";
 import { Enrollment } from "./enrollment.js";
 import { Executions, RequestError } from "./executions.js";
 import { createNodeServer } from "./server.js";
+import { Projects } from "./projects.js";
 async function acquire(stateDir: string, bootId: string) {
   const path = join(stateDir, "owner.lock");
   try {
@@ -66,6 +67,8 @@ export async function startNode(config: NodeConfig = readConfig()) {
   let enrollment: Enrollment | undefined;
   let executions: Executions | undefined;
   try {
+    const projects = new Projects(config);
+    await projects.initialize();
     const stored = (await readJson(join(config.stateDir, "identity.json"))) as
       { nodeId: string } | undefined;
     const nodeId = stored?.nodeId ?? randomUUID();
@@ -128,6 +131,7 @@ export async function startNode(config: NodeConfig = readConfig()) {
     if (discovery)
       discovery.onUnavailable = () => executions!.abort("runtime_unavailable");
     const { server, drain } = createNodeServer(config, {
+      projects,
       executions,
       hardware,
       nodeId,

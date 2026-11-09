@@ -1,4 +1,19 @@
 {
+  "addProjectSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "directory": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      }
+    },
+    "required": [
+      "directory"
+    ],
+    "additionalProperties": false
+  },
   "apiErrorSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
@@ -1895,6 +1910,164 @@
     "required": [
       "nodes"
     ]
+  },
+  "projectSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "directory": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "source": {
+        "type": "string",
+        "enum": [
+          "chat_sessions",
+          "configured",
+          "added"
+        ]
+      }
+    },
+    "required": [
+      "id",
+      "name",
+      "directory",
+      "source"
+    ],
+    "additionalProperties": false
+  },
+  "projectTreeQuerySchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "path": {
+        "default": ".",
+        "type": "string",
+        "maxLength": 4096
+      },
+      "offset": {
+        "default": 0,
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 1000000
+      }
+    },
+    "additionalProperties": false
+  },
+  "projectTreeResponseSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "entries": {
+        "maxItems": 200,
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "directory",
+                "file",
+                "symlink",
+                "other"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "path",
+            "kind"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "nextOffset": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "entries",
+      "nextOffset"
+    ],
+    "additionalProperties": false
+  },
+  "projectsResponseSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "projects": {
+        "maxItems": 256,
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "directory": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "chat_sessions",
+                "configured",
+                "added"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "directory",
+            "source"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "projects"
+    ],
+    "additionalProperties": false
   },
   "registrationSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",

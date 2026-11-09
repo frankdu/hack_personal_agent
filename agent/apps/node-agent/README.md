@@ -6,30 +6,34 @@ From the workspace root, run `npm run dev:node`. Build with `npm run build -w @a
 
 ## Configuration
 
-| Variable                       | Default                                | Purpose                                                                                                                                      |
-| ------------------------------ | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MODE`                         | `DEV`                                  | Exactly `DEV` or `PROD`                                                                                                                      |
-| `HOST`, `PORT`                 | `127.0.0.1`, `3101`                    | HTTP listener; container uses `HOST=0.0.0.0`                                                                                                 |
-| `NODE_NAME`                    | OS hostname                            | Display name; durable UUID lives under the state directory                                                                                   |
-| `NODE_STATE_DIR`               | `~/.curilo-agent/node-agent`           | Private identity, execution journal, SDK sessions and runtime records outside the workspace                                                  |
-| `AGENT_WORKSPACE_DIR`          | `<process cwd>/default-chat-workspace` | Approved workspace root; default directory is created at startup, then canonicalized                                                         |
-| `WORKSPACE_ID`                 | `default`                              | Public workspace identifier                                                                                                                  |
-| `ENABLED_TOOLS`                | `read,bash,edit,write,grep,find,ls`    | Comma-separated tool allowlist; an explicitly empty value disables all tools                                                                 |
-| `BACKEND_URL`                  | Unset                                  | Backend HTTP(S) origin; without it the node remains unregistered                                                                             |
-| `NODE_ENDPOINT`                | `http://127.0.0.1:3101`                | Advertised origin; must match backend operator allowlist                                                                                     |
-| `NODE_SHARED_TOKEN`            | Unset                                  | Shared initial bearer credential, at least 32 characters when enrolled                                                                       |
-| `RUNTIME_CONFIG`               | Unset                                  | Operator-controlled local runtime manifest JSON path                                                                                         |
-| `MODEL_PROVIDER`, `MODEL_ID`   | Unset                                  | Legacy paired model selector; runtime manifest is authoritative for served model identity, provider can override the local SDK provider name |
-| `OLLAMA_AUTO_DISCOVER`         | `true`                                 | Discover and benchmark local installed models when `RUNTIME_CONFIG` is unset                                                                 |
-| `OLLAMA_URL`                   | `http://127.0.0.1:11434`               | Local loopback HTTP origin; no credentials, paths or remote hosts                                                                            |
-| `OLLAMA_MIN_TOKENS_PER_SECOND` | `20`                                   | Minimum measured generation speed, at least 20                                                                                               |
-| `OLLAMA_MODEL_PRIORITY`        | Empty                                  | Optional comma-separated exact IDs, ranked first; speed and capability checks still apply                                                    |
-| `OLLAMA_CONTEXT_WINDOW`        | `8192`                                 | Upper bound on advertised context; capped by model metadata and configured `num_ctx` (conservative 4096 when unspecified)                    |
-| `OLLAMA_BENCHMARK_TIMEOUT_MS`  | `180000`                               | Timeout for each bounded benchmark request, including model loading                                                                          |
-| `OLLAMA_BENCHMARK_TTL_MS`      | `21600000`                             | Measurement cache lifetime, six hours by default                                                                                             |
-| `OLLAMA_REFRESH_INTERVAL_MS`   | `60000`                                | Idle inventory refresh interval                                                                                                              |
+| Variable                       | Default                             | Purpose                                                                                                                                      |
+| ------------------------------ | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MODE`                         | `DEV`                               | Exactly `DEV` or `PROD`                                                                                                                      |
+| `HOST`, `PORT`                 | `127.0.0.1`, `3101`                 | HTTP listener; container uses `HOST=0.0.0.0`                                                                                                 |
+| `NODE_NAME`                    | OS hostname                         | Display name; durable UUID lives under the state directory                                                                                   |
+| `NODE_STATE_DIR`               | `~/.curilo-agent/node-agent`        | Private identity, execution journal, SDK sessions and runtime records outside the workspace                                                  |
+| `AGENT_WORKSPACE_DIR`          | `~/.curilo/workspace/chat_sessions` | Existing project root, or default parent for per-conversation directories                                                                    |
+| `WORKSPACE_ID`                 | `default`                           | Public workspace identifier                                                                                                                  |
+| `ENABLED_TOOLS`                | `read,bash,edit,write,grep,find,ls` | Comma-separated tool allowlist; an explicitly empty value disables all tools                                                                 |
+| `BACKEND_URL`                  | Unset                               | Backend HTTP(S) origin; without it the node remains unregistered                                                                             |
+| `NODE_ENDPOINT`                | `http://127.0.0.1:3101`             | Advertised origin; must match backend operator allowlist                                                                                     |
+| `NODE_SHARED_TOKEN`            | Unset                               | Shared initial bearer credential, at least 32 characters when enrolled                                                                       |
+| `RUNTIME_CONFIG`               | Unset                               | Operator-controlled local runtime manifest JSON path                                                                                         |
+| `MODEL_PROVIDER`, `MODEL_ID`   | Unset                               | Legacy paired model selector; runtime manifest is authoritative for served model identity, provider can override the local SDK provider name |
+| `OLLAMA_AUTO_DISCOVER`         | `true`                              | Discover and benchmark local installed models when `RUNTIME_CONFIG` is unset                                                                 |
+| `OLLAMA_URL`                   | `http://127.0.0.1:11434`            | Local loopback HTTP origin; no credentials, paths or remote hosts                                                                            |
+| `OLLAMA_MIN_TOKENS_PER_SECOND` | `20`                                | Minimum measured generation speed, at least 20                                                                                               |
+| `OLLAMA_MODEL_PRIORITY`        | Empty                               | Optional comma-separated exact IDs, ranked first; speed and capability checks still apply                                                    |
+| `OLLAMA_CONTEXT_WINDOW`        | `8192`                              | Upper bound on advertised context; capped by model metadata and configured `num_ctx` (conservative 4096 when unspecified)                    |
+| `OLLAMA_BENCHMARK_TIMEOUT_MS`  | `180000`                            | Timeout for each bounded benchmark request, including model loading                                                                          |
+| `OLLAMA_BENCHMARK_TTL_MS`      | `21600000`                          | Measurement cache lifetime, six hours by default                                                                                             |
+| `OLLAMA_REFRESH_INTERVAL_MS`   | `60000`                             | Idle inventory refresh interval                                                                                                              |
 
-When `AGENT_WORKSPACE_DIR` is unset, empty, or whitespace-only, the node uses `default-chat-workspace` under its process working directory and creates it if necessary. Set a nonempty `AGENT_WORKSPACE_DIR` to use an existing project directory instead. Relative project paths resolve from the process working directory. The working directory is determined by how the node is launched (for example, its service configuration or npm workspace command).
+When `AGENT_WORKSPACE_DIR` is unset, empty, or whitespace-only, startup creates `~/.curilo/workspace/chat_sessions`. Each execution creates or reuses its working directory at `<chat_sessions>/<conversation-id>`; the conversation ID is the stable chat session ID, so all turns in that conversation share files on the same node. SDK sessions, file tools and shell tools use that directory. Separate conversations get separate directories. This replaces the earlier `<process cwd>/default-chat-workspace` default; existing files are left in place.
+
+Set a nonempty `AGENT_WORKSPACE_DIR` to use an existing project directory for tasks instead. Relative configured paths resolve from the process working directory. Private state stays outside the workspace and is never browsable through the project API.
+
+The authenticated project service automatically exposes the default parent with display name `chat_sessions`, or the explicitly configured project with its directory name. Operators can add other existing project roots; canonical paths and IDs persist in `projects.json` under the private state directory. Adding a sidebar project grants directory browsing, not additional tool permissions or a change to the configured chat working directory. Legacy browser-saved roots are imported by the frontend when the node is online.
 
 Keep state outside the tool workspace. Do not mount a Docker socket or provider credentials into the workspace. This release has a shared provisioning credential; per-node credentials and mTLS remain production work.
 
@@ -116,6 +120,9 @@ Runtime health probes run periodically. Recovery has bounded attempts with expon
 - `GET /health/live`: process availability.
 - `GET /health/ready`: 200 only with a current enrollment lease, warm runtime, free execution slot and no unresolved unknown attempt.
 - `GET /v1/node/status`: public descriptive status; no credentials or local paths.
+- `GET /v1/node/projects`: node-authenticated project roots, including the automatic default parent; private paths are visible only through this operator-facing service.
+- `POST /v1/node/projects`: node-authenticated `{directory}`; validate and persist an existing project root (supports `~/`); duplicate canonical roots return the same project.
+- `GET /v1/node/projects/:projectId/tree?path=.&offset=0`: node-authenticated directory entries relative to an approved root, at most 200 per page. `nextOffset` loads the next page. Traversal, private state and symlink expansion are rejected. Symlinks are displayed as leaves; file contents are not returned.
 - `POST /v1/node/model`: authenticated `{profileId, bootId, generation}`; returns 202 with profiles after reserving an asynchronous switch. The backend exposes this as operator-authenticated `POST /v1/nodes/:nodeId/model` with `{profileId}` and rejects queued or unresolved tasks under the placement lock.
 - `POST /v1/executions`: authenticated shared-contract envelope; returns a bare snapshot and 202 after durable acceptance.
 - `GET /v1/executions/:attemptId`: authenticated snapshot polling.

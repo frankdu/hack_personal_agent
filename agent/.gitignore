@@ -1,3 +1,6 @@
+# agent workspace
+default-chat-workspace
+
 node_modules/
 dist/
 .output/

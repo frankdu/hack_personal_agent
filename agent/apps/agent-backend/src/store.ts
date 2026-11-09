@@ -249,6 +249,62 @@ export class Store {
       return { node, reserved: Number(row.reserved) };
     });
   }
+  /** Authenticated operator-only project APIs; destinations come from enrolled nodes. */
+  async projectRequest(
+    nodeId: string,
+    suffix: string,
+    method: "GET" | "POST",
+    payload?: unknown,
+  ) {
+    const row = (
+      await this.pool.query("SELECT * FROM nodes WHERE id=$1", [nodeId])
+    ).rows[0];
+    if (!row || row.superseded_by) throw missing();
+    if (row.lease_expires.getTime() <= Date.now())
+      throw new ApiError(409, "NODE_UNAVAILABLE", "This node is offline.");
+    const endpoint = origin((row.registration as Registration).endpoint);
+    if (!this.config.nodeOrigins.has(endpoint))
+      throw new ApiError(
+        403,
+        "NODE_ENDPOINT_DENIED",
+        "Node endpoint is not enrolled in the allowlist.",
+      );
+    try {
+      const response = await fetch(`${endpoint}/v1/node/projects${suffix}`, {
+        method,
+        redirect: "error",
+        signal: AbortSignal.timeout(10_000),
+        headers: {
+          authorization: `Bearer ${this.config.nodeToken}`,
+          ...(payload === undefined
+            ? {}
+            : { "content-type": "application/json" }),
+        },
+        ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+      });
+      const data: unknown = JSON.parse(await limitedText(response, 1_000_000));
+      if (!response.ok) {
+        const parsed = apiErrorSchema.safeParse(data);
+        throw new ApiError(
+          response.status >= 400 && response.status < 500
+            ? response.status
+            : 502,
+          parsed.success ? parsed.data.error.code : "PROJECT_REQUEST_FAILED",
+          parsed.success
+            ? parsed.data.error.message
+            : "The node could not read this project.",
+        );
+      }
+      return data;
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(
+        502,
+        "NODE_CONNECTION_FAILED",
+        "Could not reach the node's project service.",
+      );
+    }
+  }
   async selectModel(
     nodeId: string,
     profileId: string,
