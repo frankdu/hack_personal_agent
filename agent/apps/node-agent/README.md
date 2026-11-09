@@ -37,6 +37,9 @@ The authenticated project service automatically exposes the default parent with 
 
 Keep state outside the tool workspace. Do not mount a Docker socket or provider credentials into the workspace. This release has a shared provisioning credential; per-node credentials and mTLS remain production work.
 
+For a Linux GPU worker connected to a remote backend, see the reusable
+[Linux service setup](SETUP_LINUX.md).
+
 ## Automatic Ollama selection
 
 With no `RUNTIME_CONFIG`, startup lists `/api/tags` and reads `/api/show` metadata. All installed models appear in fleet profiles. There is no model-family restriction. Automatic selection admits downloaded local models with completion and tool support, a known parameter count, and weights no larger than 80% of total machine memory. Cloud-backed models are excluded. Ollama remains responsible for loading and actual memory admission; a failed/OOM/timeout benchmark is ineligible for automatic selection, never an assumed pass.
