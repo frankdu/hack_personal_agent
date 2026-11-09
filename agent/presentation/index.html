@@ -1,0 +1,2092 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <meta
+      name="description"
+      content="Curilo: a personal agent cloud built from your own computers, with local models and cloud intelligence. A hackathon presentation."
+    />
+    <title>Curilo · Your personal agent cloud</title>
+    <style>
+      :root {
+        --bg: #0a0d10;
+        --paper: #f1f0e8;
+        --ink: #18201e;
+        --muted: #a5afa9;
+        --lime: #d0f78b;
+        --line: #ffffff26;
+        font-family:
+          Inter,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--paper);
+      }
+      button,
+      a {
+        -webkit-tap-highlight-color: transparent;
+      }
+      button {
+        font: inherit;
+        cursor: pointer;
+      }
+      button:focus-visible,
+      a:focus-visible {
+        outline: 3px solid #83b943;
+        outline-offset: 5px;
+      }
+      .app {
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+      }
+      .topbar,
+      .controls {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 36px;
+        gap: 20px;
+      }
+      .topbar {
+        height: 62px;
+        flex-shrink: 0;
+      }
+      .brand {
+        font-weight: 750;
+        font-size: 22px;
+        letter-spacing: -0.06em;
+      }
+      .brand span {
+        color: var(--lime);
+      }
+      .meta,
+      .eyebrow,
+      .label,
+      .slide-footer,
+      .mono {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+      .meta {
+        font-size: 11px;
+        color: #9aa59f;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+      .viewport {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 32px;
+        min-height: 0;
+      }
+      .stage {
+        width: min(100%, calc((100dvh - 146px) * 16 / 9));
+        aspect-ratio: 16 / 9;
+        position: relative;
+        container-type: inline-size;
+        box-shadow: 0 18px 70px #0004;
+      }
+      .slide {
+        position: absolute;
+        inset: 0;
+        display: none;
+        padding: 4.4cqw 5.3cqw;
+        background: #141d1b;
+        overflow: hidden;
+      }
+      .slide.active {
+        display: flex;
+        flex-direction: column;
+        animation: arrive 0.23s ease-out;
+      }
+      .slide.light {
+        background: var(--paper);
+        color: var(--ink);
+        --muted: #616b63;
+        --line: #18201e2c;
+      }
+      .slide.lime {
+        background: var(--lime);
+        color: var(--ink);
+        --muted: #4f633d;
+        --line: #18201e40;
+      }
+      .eyebrow {
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+        color: var(--muted);
+        font-size: 1.02cqw;
+        margin: 0 0 2cqw;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-size: 7.8cqw;
+        font-weight: 600;
+        line-height: 0.98;
+        letter-spacing: -0.065em;
+      }
+      h2 {
+        font-size: 4.35cqw;
+        font-weight: 580;
+        line-height: 1.07;
+        letter-spacing: -0.048em;
+        max-width: 90%;
+      }
+      h3 {
+        font-size: 2.05cqw;
+        font-weight: 560;
+        line-height: 1.15;
+        letter-spacing: -0.025em;
+      }
+      p {
+        font-size: 1.65cqw;
+        line-height: 1.5;
+      }
+      .accent {
+        color: var(--lime);
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .lede {
+        margin-top: 1.9cqw;
+        max-width: 65cqw;
+        font-size: 1.85cqw;
+        line-height: 1.45;
+      }
+      .slide-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 2cqw;
+        font-size: 0.9cqw;
+        color: var(--muted);
+        margin-top: auto;
+        padding-top: 1.5cqw;
+      }
+      .cover {
+        justify-content: center;
+      }
+      .cover .eyebrow {
+        margin-bottom: 3.5cqw;
+      }
+      .cover .lede {
+        max-width: 54cqw;
+        margin-top: 3cqw;
+        color: #bfcbc3;
+      }
+      .cover .slide-footer {
+        position: absolute;
+        bottom: 3.7cqw;
+        left: 5.3cqw;
+        right: 5.3cqw;
+      }
+      .cover-name {
+        position: absolute;
+        top: 4.2cqw;
+        right: 5.3cqw;
+        font-size: 2.1cqw;
+        font-weight: 650;
+        letter-spacing: -0.06em;
+        color: var(--lime);
+      }
+      .fleet {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        margin-top: 4.4cqw;
+      }
+      .fleet-item {
+        padding: 0 2.6cqw;
+        border-left: 1px solid var(--line);
+      }
+      .fleet-item:first-child {
+        padding-left: 0;
+        border: 0;
+      }
+      .fleet-item .ordinal {
+        display: block;
+        font:
+          1.05cqw "SFMono-Regular",
+          Consolas,
+          monospace;
+        color: var(--muted);
+        margin-bottom: 2.6cqw;
+      }
+      .fleet-item p {
+        margin-top: 1cqw;
+        max-width: 24cqw;
+        color: var(--muted);
+      }
+      .statement {
+        border-top: 1px solid var(--line);
+        margin-top: 3cqw;
+        padding-top: 1.6cqw;
+        font-size: 2.05cqw;
+        line-height: 1.3;
+        letter-spacing: -0.02em;
+      }
+      .two-col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 5cqw;
+        margin-top: 3.5cqw;
+      }
+      .hybrid-side {
+        border-top: 1px solid var(--line);
+        padding-top: 1.5cqw;
+      }
+      .big-label {
+        font-size: 3.2cqw;
+        letter-spacing: -0.045em;
+        margin: 1.1cqw 0;
+        font-weight: 550;
+      }
+      .label {
+        font-size: 1.02cqw;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .hybrid-side p {
+        color: var(--muted);
+        max-width: 37cqw;
+      }
+      .bottom-claim {
+        margin-top: auto;
+        padding-top: 1.5cqw;
+        font-size: 1.7cqw;
+      }
+      .feature-list {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        column-gap: 5cqw;
+        row-gap: 2.3cqw;
+        margin-top: 3cqw;
+      }
+      .feature {
+        border-top: 1px solid var(--line);
+        padding-top: 1.3cqw;
+        display: grid;
+        grid-template-columns: 3.6cqw 1fr;
+        gap: 1cqw;
+      }
+      .feature-num {
+        font:
+          1.2cqw "SFMono-Regular",
+          Consolas,
+          monospace;
+        color: var(--lime);
+        padding-top: 0.35cqw;
+      }
+      .feature p {
+        margin-top: 0.65cqw;
+        color: var(--muted);
+        max-width: 33cqw;
+        font-size: 1.48cqw;
+      }
+      .architecture {
+        margin-top: 2.5cqw;
+        display: grid;
+        grid-template-columns: 20cqw 1fr 23cqw;
+        grid-template-rows: auto 1fr;
+        gap: 1.7cqw 3cqw;
+      }
+      .arch-title {
+        font-size: 1.05cqw;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+      .arch-column {
+        border-top: 1px solid var(--line);
+        padding-top: 1.4cqw;
+      }
+      .arch-column h3 {
+        margin-bottom: 1cqw;
+      }
+      .arch-column p {
+        font-size: 1.35cqw;
+        color: var(--muted);
+      }
+      .arch-line {
+        margin-top: 1.15cqw;
+        padding-top: 0.9cqw;
+        border-top: 1px solid var(--line);
+      }
+      .arch-line b {
+        display: block;
+        font-weight: 550;
+        font-size: 1.55cqw;
+        margin-bottom: 0.4cqw;
+      }
+      .arch-note {
+        margin-top: 1.5cqw;
+        padding: 1.1cqw 0;
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        font-size: 1.6cqw;
+      }
+      .routing {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 3cqw;
+        margin-top: 3.6cqw;
+      }
+      .route-step {
+        border-top: 1px solid var(--line);
+        padding-top: 1.2cqw;
+      }
+      .route-step .step-no {
+        font:
+          1.05cqw "SFMono-Regular",
+          Consolas,
+          monospace;
+        color: var(--muted);
+      }
+      .route-step h3 {
+        margin-top: 1.3cqw;
+        margin-bottom: 1.1cqw;
+      }
+      .route-step p {
+        color: var(--muted);
+        font-size: 1.45cqw;
+      }
+      .route-fact {
+        margin-top: 2.6cqw;
+        font-size: 1.65cqw;
+        padding-top: 1.5cqw;
+        border-top: 1px solid var(--line);
+      }
+      .workspace-rows {
+        margin-top: 2.5cqw;
+      }
+      .workspace-row {
+        display: grid;
+        grid-template-columns: 26cqw 1fr 13cqw;
+        gap: 2cqw;
+        align-items: center;
+        padding: 1.35cqw 0;
+        border-top: 1px solid var(--line);
+      }
+      .workspace-row h3 {
+        font-size: 1.9cqw;
+      }
+      .workspace-row p {
+        font-size: 1.45cqw;
+        color: var(--muted);
+      }
+      .direction {
+        font:
+          0.9cqw "SFMono-Regular",
+          Consolas,
+          monospace;
+        text-align: right;
+        color: var(--muted);
+      }
+      .request {
+        margin-top: 2cqw;
+        font-size: 2.15cqw;
+        letter-spacing: -0.025em;
+        line-height: 1.3;
+        max-width: 76cqw;
+      }
+      .walkthrough {
+        display: grid;
+        grid-template-columns: 27cqw 1fr;
+        gap: 5cqw;
+        margin-top: 2.4cqw;
+      }
+      .walk-tabs {
+        display: flex;
+        flex-direction: column;
+      }
+      .walk-tab {
+        text-align: left;
+        background: none;
+        color: var(--muted);
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        padding: 0.78cqw 0;
+        font-size: 1.45cqw;
+      }
+      .walk-tab span {
+        display: inline-block;
+        width: 3.2cqw;
+        font:
+          1cqw "SFMono-Regular",
+          Consolas,
+          monospace;
+      }
+      .walk-tab[aria-selected="true"] {
+        color: var(--lime);
+      }
+      .walk-panel {
+        border-top: 1px solid var(--line);
+        padding-top: 1.1cqw;
+      }
+      .walk-panel .label {
+        color: var(--lime);
+      }
+      .walk-panel h3 {
+        font-size: 2.8cqw;
+        margin: 1.1cqw 0 1.2cqw;
+      }
+      .walk-panel p {
+        color: var(--muted);
+        max-width: 46cqw;
+      }
+      .walk-next {
+        color: var(--lime);
+        background: none;
+        border: 0;
+        padding: 1.4cqw 0 0;
+        font-size: 1.1cqw;
+        text-decoration: underline;
+        text-underline-offset: 0.3em;
+      }
+      .proof {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 6cqw;
+        margin-top: 2.8cqw;
+      }
+      .proof-path {
+        font-size: 3.1cqw;
+        line-height: 1.35;
+        letter-spacing: -0.04em;
+      }
+      .proof-path span {
+        display: block;
+        color: var(--muted);
+        font-size: 1cqw;
+        letter-spacing: 0.05em;
+        margin: 0.35cqw 0;
+      }
+      .proof-details {
+        border-top: 1px solid var(--line);
+      }
+      .proof-details p {
+        padding: 1cqw 0;
+        border-bottom: 1px solid var(--line);
+        font-size: 1.5cqw;
+      }
+      .proof-details b {
+        display: block;
+        margin-bottom: 0.3cqw;
+        font-weight: 600;
+      }
+      .proof-details small {
+        color: var(--muted);
+        font-size: 1.25cqw;
+        line-height: 1.4;
+        display: block;
+      }
+      .roadmap {
+        margin-top: 2.6cqw;
+      }
+      .roadmap-row {
+        display: grid;
+        grid-template-columns: 4cqw 26cqw 1fr;
+        gap: 1.5cqw;
+        padding: 1.15cqw 0;
+        border-top: 1px solid var(--line);
+        align-items: baseline;
+      }
+      .roadmap-row .mono {
+        font-size: 1cqw;
+        color: var(--muted);
+      }
+      .roadmap-row h3 {
+        font-size: 1.9cqw;
+      }
+      .roadmap-row p {
+        color: var(--muted);
+        font-size: 1.42cqw;
+      }
+      .closing h2 {
+        font-size: 6.8cqw;
+        line-height: 1.03;
+        max-width: 100%;
+      }
+      .closing .lede {
+        max-width: 72cqw;
+      }
+      .closing .closing-brand {
+        font-size: 2.2cqw;
+        letter-spacing: -0.06em;
+        font-weight: 700;
+        margin-bottom: 3.6cqw;
+      }
+      .closing .bottom-claim {
+        font-size: 1.5cqw;
+      }
+      .controls {
+        min-height: 78px;
+        flex-shrink: 0;
+      }
+      .control-group {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .control {
+        background: transparent;
+        border: 1px solid #ffffff22;
+        border-radius: 6px;
+        color: #bdc8c0;
+        min-height: 34px;
+        padding: 7px 11px;
+        font-size: 12px;
+      }
+      .control:hover,
+      .control[aria-pressed="true"] {
+        background: #ffffff10;
+        color: var(--lime);
+      }
+      .control:disabled {
+        opacity: 0.3;
+        cursor: default;
+      }
+      .counter {
+        color: #d4ddd6;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        min-width: 54px;
+        text-align: center;
+      }
+      .key-hint {
+        font-size: 11px;
+        color: #87948a;
+      }
+      .progress {
+        position: fixed;
+        bottom: 0;
+        height: 3px;
+        width: 100%;
+        background: #ffffff0b;
+        z-index: 20;
+      }
+      .progress span {
+        height: 100%;
+        display: block;
+        background: var(--lime);
+        width: 9.09%;
+        transition: width 0.2s ease;
+      }
+      .notes {
+        display: none;
+        width: min(960px, calc(100% - 48px));
+        margin: 0 auto 32px;
+        border-top: 1px solid #ffffff25;
+        padding: 22px 0;
+      }
+      .notes.open {
+        display: block;
+      }
+      .notes h2 {
+        font-size: 18px;
+        margin-bottom: 12px;
+      }
+      .notes p {
+        font-size: 15px;
+        color: #b5c1b8;
+        line-height: 1.6;
+      }
+      .notes .sources {
+        font-size: 12px;
+        margin-top: 14px;
+      }
+      .notes a {
+        color: var(--lime);
+      }
+      .notes .timing {
+        color: var(--lime);
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
+      dialog {
+        border: 1px solid #ffffff30;
+        border-radius: 12px;
+        background: #141d1b;
+        color: var(--paper);
+        padding: 28px;
+        width: min(920px, calc(100% - 32px));
+        max-height: 88dvh;
+      }
+      dialog::backdrop {
+        background: #05080be8;
+      }
+      .dialog-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 24px;
+        gap: 20px;
+      }
+      .dialog-heading h2 {
+        font-size: 24px;
+      }
+      .overview-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+      }
+      .overview-item {
+        border: 1px solid #ffffff22;
+        background: transparent;
+        color: var(--paper);
+        text-align: left;
+        padding: 18px;
+        min-height: 106px;
+        border-radius: 5px;
+        line-height: 1.4;
+        font-size: 14px;
+      }
+      .overview-item span {
+        display: block;
+        color: var(--lime);
+        font-size: 11px;
+        margin-bottom: 10px;
+      }
+      .overview-item:hover,
+      .overview-item[aria-current="true"] {
+        background: #d0f78b12;
+        border-color: var(--lime);
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      @keyframes arrive {
+        from {
+          opacity: 0.3;
+          transform: translateY(5px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .slide.active {
+          animation: none;
+        }
+        .progress span {
+          transition: none;
+        }
+      }
+      @media (max-width: 700px) {
+        .topbar,
+        .controls {
+          padding-left: 18px;
+          padding-right: 18px;
+        }
+        .topbar {
+          height: 56px;
+        }
+        .meta {
+          font-size: 9px;
+          letter-spacing: 0.06em;
+        }
+        .viewport {
+          padding: 0 12px;
+          align-items: stretch;
+        }
+        .stage {
+          width: 100%;
+          height: calc(100dvh - 150px);
+          min-height: 500px;
+          aspect-ratio: auto;
+        }
+        .slide {
+          padding: 30px 24px;
+          overflow-y: auto;
+        }
+        .eyebrow {
+          font-size: 10px;
+          margin-bottom: 22px;
+        }
+        h1 {
+          font-size: 58px;
+        }
+        h2 {
+          font-size: 36px;
+          max-width: 100%;
+        }
+        h3 {
+          font-size: 22px;
+        }
+        p,
+        .lede {
+          font-size: 16px;
+        }
+        .lede {
+          margin-top: 24px;
+          max-width: none;
+        }
+        .cover-name {
+          top: 25px;
+          right: 24px;
+          font-size: 22px;
+        }
+        .cover .lede {
+          max-width: none;
+          margin-top: 30px;
+        }
+        .cover .eyebrow {
+          margin-bottom: 35px;
+        }
+        .slide-footer {
+          font-size: 9px;
+          padding-top: 25px;
+        }
+        .cover .slide-footer {
+          bottom: 28px;
+          left: 24px;
+          right: 24px;
+        }
+        .fleet {
+          grid-template-columns: 1fr;
+          margin-top: 25px;
+          gap: 18px;
+        }
+        .fleet-item,
+        .fleet-item:first-child {
+          border-left: 0;
+          border-top: 1px solid var(--line);
+          padding: 14px 0 0;
+        }
+        .fleet-item .ordinal {
+          float: right;
+          font-size: 10px;
+          margin: 0;
+        }
+        .fleet-item p {
+          max-width: none;
+          margin-top: 5px;
+          font-size: 15px;
+        }
+        .statement {
+          font-size: 20px;
+          margin-top: 24px;
+          padding-top: 14px;
+        }
+        .two-col {
+          grid-template-columns: 1fr;
+          gap: 22px;
+          margin-top: 28px;
+        }
+        .hybrid-side {
+          padding-top: 16px;
+        }
+        .label {
+          font-size: 10px;
+        }
+        .big-label {
+          font-size: 31px;
+          margin: 10px 0;
+        }
+        .hybrid-side p {
+          max-width: none;
+        }
+        .bottom-claim {
+          padding-top: 28px;
+          font-size: 17px;
+        }
+        .feature-list {
+          grid-template-columns: 1fr;
+          margin-top: 24px;
+          row-gap: 18px;
+        }
+        .feature {
+          grid-template-columns: 30px 1fr;
+          gap: 10px;
+          padding-top: 14px;
+        }
+        .feature-num {
+          font-size: 12px;
+          padding-top: 5px;
+        }
+        .feature p {
+          font-size: 15px;
+          max-width: none;
+          margin-top: 6px;
+        }
+        .architecture {
+          grid-template-columns: 1fr;
+          gap: 0;
+          margin-top: 26px;
+        }
+        .arch-title {
+          display: none;
+        }
+        .arch-column {
+          padding: 16px 0;
+        }
+        .arch-column h3 {
+          margin-bottom: 8px;
+        }
+        .arch-column p {
+          font-size: 15px;
+        }
+        .arch-line {
+          margin-top: 12px;
+          padding-top: 12px;
+        }
+        .arch-line b {
+          font-size: 17px;
+          margin-bottom: 5px;
+        }
+        .arch-note {
+          margin-top: 16px;
+          padding: 16px 0;
+          font-size: 16px;
+        }
+        .routing {
+          grid-template-columns: 1fr;
+          gap: 22px;
+          margin-top: 24px;
+        }
+        .route-step {
+          padding-top: 12px;
+        }
+        .route-step .step-no {
+          font-size: 10px;
+        }
+        .route-step h3 {
+          margin: 8px 0;
+        }
+        .route-step p {
+          font-size: 15px;
+        }
+        .route-fact {
+          font-size: 16px;
+          margin-top: 24px;
+          padding-top: 14px;
+        }
+        .workspace-rows {
+          margin-top: 25px;
+        }
+        .workspace-row {
+          grid-template-columns: 1fr;
+          gap: 8px;
+          padding: 16px 0;
+        }
+        .workspace-row h3 {
+          font-size: 22px;
+        }
+        .workspace-row p {
+          font-size: 15px;
+        }
+        .direction {
+          font-size: 10px;
+          text-align: left;
+        }
+        .request {
+          font-size: 22px;
+          max-width: none;
+          margin-top: 24px;
+        }
+        .walkthrough {
+          grid-template-columns: 1fr;
+          gap: 22px;
+          margin-top: 24px;
+        }
+        .walk-tabs {
+          flex-direction: row;
+          flex-wrap: wrap;
+          gap: 8px 14px;
+        }
+        .walk-tab {
+          font-size: 12px;
+          padding: 9px 0;
+        }
+        .walk-tab span {
+          width: 22px;
+          font-size: 10px;
+        }
+        .walk-panel {
+          padding-top: 16px;
+        }
+        .walk-panel h3 {
+          font-size: 27px;
+          margin: 12px 0;
+        }
+        .walk-panel p {
+          max-width: none;
+          font-size: 16px;
+        }
+        .walk-next {
+          font-size: 13px;
+          padding-top: 20px;
+        }
+        .proof {
+          grid-template-columns: 1fr;
+          gap: 24px;
+          margin-top: 28px;
+        }
+        .proof-path {
+          font-size: 31px;
+        }
+        .proof-path span {
+          font-size: 10px;
+          margin: 3px 0;
+        }
+        .proof-details p {
+          font-size: 17px;
+          padding: 14px 0;
+        }
+        .proof-details small {
+          font-size: 14px;
+        }
+        .roadmap {
+          margin-top: 28px;
+        }
+        .roadmap-row {
+          grid-template-columns: 24px 1fr;
+          gap: 10px;
+          padding: 17px 0;
+        }
+        .roadmap-row .mono {
+          font-size: 10px;
+        }
+        .roadmap-row h3 {
+          font-size: 22px;
+        }
+        .roadmap-row p {
+          font-size: 15px;
+          grid-column: 2;
+        }
+        .closing h2 {
+          font-size: 46px;
+        }
+        .closing .closing-brand {
+          font-size: 24px;
+          margin-bottom: 44px;
+        }
+        .closing .lede {
+          max-width: none;
+        }
+        .closing .bottom-claim {
+          font-size: 16px;
+        }
+        .controls {
+          min-height: 82px;
+          gap: 6px;
+          flex-wrap: wrap;
+          align-content: center;
+        }
+        .control-group {
+          gap: 5px;
+        }
+        .control {
+          font-size: 11px;
+          padding: 7px 8px;
+        }
+        .key-hint {
+          display: none;
+        }
+        .overview-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      @media print {
+        @page {
+          size: 16in 9in;
+          margin: 0;
+        }
+        html,
+        body,
+        .app {
+          margin: 0;
+          background: white;
+          display: block;
+        }
+        .topbar,
+        .controls,
+        .progress,
+        .notes,
+        dialog,
+        .sr-only {
+          display: none !important;
+        }
+        .viewport {
+          display: block;
+          padding: 0;
+        }
+        .stage {
+          display: block;
+          width: 16in;
+          height: auto;
+          aspect-ratio: auto;
+          box-shadow: none;
+        }
+        .slide,
+        .slide.active {
+          display: flex;
+          position: relative;
+          inset: auto;
+          width: 16in;
+          height: 9in;
+          break-after: page;
+          print-color-adjust: exact;
+          -webkit-print-color-adjust: exact;
+          overflow: hidden;
+          animation: none;
+        }
+        .slide:last-child {
+          break-after: auto;
+        }
+        .walk-next {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand" aria-label="Curilo">curilo<span>.</span></div>
+        <div class="meta">Personal agent cloud / Hackathon 2026</div>
+      </header>
+      <main class="viewport" aria-label="Hackathon presentation">
+        <div class="stage" id="stage">
+          <section
+            class="slide cover active"
+            data-title="Your personal agent cloud"
+            aria-labelledby="title-1"
+          >
+            <div class="cover-name" aria-hidden="true">curilo.</div>
+            <p class="eyebrow">Your personal agent cloud</p>
+            <h1 id="title-1">
+              Your machines.<br />One <span class="accent">AI cloud.</span>
+            </h1>
+            <p class="lede">
+              Local models across the computers you own.<br />Cloud intelligence
+              when you need more.
+            </p>
+            <div class="slide-footer">
+              <span>A proof of concept for individuals and families</span
+              ><span>01 / THE IDEA</span>
+            </div>
+            <template
+              class="speaker-note"
+              data-time="25 seconds"
+              data-sources="../research-docs/README.md,../README.md"
+              >Curilo is a proof of concept for a personal agent cloud. Our
+              starting point is that an individual or family already has several
+              computers with different capabilities. We want those machines to
+              contribute to one agent experience, with models running on our own
+              hardware and cloud AI providing additional intelligence. This
+              presentation focuses on the direction and the core
+              infrastructure.</template
+            >
+          </section>
+
+          <section
+            class="slide light"
+            data-title="The household compute fleet"
+            aria-labelledby="title-2"
+            hidden
+          >
+            <p class="eyebrow">The starting assumption</p>
+            <h2 id="title-2">A household already has<br />a compute fleet</h2>
+            <p class="lede muted">
+              Different machines. Different strengths. Capacity that could work
+              together.
+            </p>
+            <div class="fleet">
+              <div class="fleet-item">
+                <span class="ordinal">01 / PERSONAL</span>
+                <h3>The laptop</h3>
+                <p>
+                  Everyday work, local files, and models that fit its memory.
+                </p>
+              </div>
+              <div class="fleet-item">
+                <span class="ordinal">02 / POWERFUL</span>
+                <h3>The workstation</h3>
+                <p>
+                  More GPU capacity for larger local models and demanding tasks.
+                </p>
+              </div>
+              <div class="fleet-item">
+                <span class="ordinal">03 / AVAILABLE</span>
+                <h3>The home server</h3>
+                <p>
+                  A place for persistent services and shared household
+                  resources.
+                </p>
+              </div>
+            </div>
+            <p class="statement">
+              What if these computers formed your own AI infrastructure?
+            </p>
+            <div class="slide-footer">
+              <span>Illustrative household setup</span
+              ><span>02 / THE OPPORTUNITY</span>
+            </div>
+            <template
+              class="speaker-note"
+              data-time="30 seconds"
+              data-sources="../research-docs/architecture.md"
+              >This is our product assumption, not a market statistic. Think of
+              a laptop, a more powerful desktop, and perhaps a home server or
+              spare computer. They differ in memory, acceleration, availability,
+              and access to files. The opportunity is to coordinate the
+              resources the household already has. We are coordinating
+              placements across machines, not combining their GPUs to train or
+              serve one sharded model.</template
+            >
+          </section>
+
+          <section
+            class="slide lime"
+            data-title="Local compute with cloud intelligence"
+            aria-labelledby="title-3"
+            hidden
+          >
+            <p class="eyebrow">The vision</p>
+            <h2 id="title-3">
+              Personal compute,<br />supported by cloud intelligence
+            </h2>
+            <div class="two-col">
+              <div class="hybrid-side">
+                <span class="label">On your machines</span>
+                <div class="big-label">Local execution</div>
+                <p>
+                  Run on-device models close to the workspaces and tools they
+                  need. Use the capabilities available across your fleet.
+                </p>
+              </div>
+              <div class="hybrid-side">
+                <span class="label">Beyond your machines</span>
+                <div class="big-label">Cloud intelligence</div>
+                <p>
+                  Use hosted AI for routing judgments today, with stronger
+                  hosted agents as an execution option in the product direction.
+                </p>
+              </div>
+            </div>
+            <p class="bottom-claim">
+              One agent experience combines personal hardware and hosted AI.
+            </p>
+            <div class="slide-footer">
+              <span
+                >Hosted routing judgment and hosted task execution are separate
+                roles</span
+              ><span>03 / THE HYBRID MODEL</span>
+            </div>
+            <template
+              class="speaker-note"
+              data-time="35 seconds"
+              data-sources="../research-docs/architecture.md,../SYSTEM_DESIGN.md"
+              >The vision is hybrid. Local models let personal machines do
+              useful work. Cloud AI adds intelligence beyond what those machines
+              can provide. There are two distinct cloud roles: TypeSafe Jev
+              supplies routing judgments in the backend integration; the target
+              design adds authenticated hosted agent execution through providers
+              such as Codex and Claude Code. Those provider adapters are a
+              product direction. A task running locally may still send task
+              context to Jev when hosted routing judgment is allowed, so local
+              execution alone is not a promise that no data leaves the
+              machine.</template
+            >
+          </section>
+
+          <section
+            class="slide"
+            data-title="Four hero directions"
+            aria-labelledby="title-4"
+            hidden
+          >
+            <p class="eyebrow">Hero features / Product direction</p>
+            <h2 id="title-4">The personal cloud experience</h2>
+            <div class="feature-list">
+              <div class="feature">
+                <span class="feature-num">01</span>
+                <div>
+                  <h3>Discover the fleet</h3>
+                  <p>
+                    See machines, hardware, available models, and readiness in
+                    one place.
+                  </p>
+                </div>
+              </div>
+              <div class="feature">
+                <span class="feature-num">02</span>
+                <div>
+                  <h3>Choose where work runs</h3>
+                  <p>
+                    Route among eligible machines, or pin a machine and see the
+                    reason.
+                  </p>
+                </div>
+              </div>
+              <div class="feature">
+                <span class="feature-num">03</span>
+                <div>
+                  <h3>Keep one agent workspace</h3>
+                  <p>
+                    Use a shared conversation interface with explicit access to
+                    each machine’s projects and tools.
+                  </p>
+                </div>
+              </div>
+              <div class="feature">
+                <span class="feature-num">04</span>
+                <div>
+                  <h3>Manage compute centrally</h3>
+                  <p>
+                    Discover providers, select model deployments, and reach
+                    machines through browser terminals.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div class="slide-footer">
+              <span
+                >The POC establishes the execution foundation for this
+                experience</span
+              ><span>04 / THE EXPERIENCE</span>
+            </div>
+            <template
+              class="speaker-note"
+              data-time="35 seconds"
+              data-sources="../research-docs/README.md,../SYSTEM_DESIGN.md,../IMPLEMENTATION.md"
+              >These are the hero directions rather than a feature completion
+              checklist. First, make the household's compute visible. Second,
+              let the system select an eligible placement while preserving
+              manual control and readable explanations. Third, provide one
+              conversation and project interface. Fourth, extend that interface
+              to provider discovery, selected model deployments, and browser
+              shells. The current POC covers fleet, chat, pins, local execution,
+              and durable dispatch. The latest provider, deployment-picker, and
+              terminal designs extend that foundation.</template
+            >
+          </section>
+
+          <section
+            class="slide light"
+            data-title="Core infrastructure"
+            aria-labelledby="title-5"
+            hidden
+          >
+            <p class="eyebrow">The architecture</p>
+            <h2 id="title-5">One control plane for the fleet</h2>
+            <div
+              class="architecture"
+              aria-label="Architecture: browser connects to backend, which coordinates node agents and cloud intelligence"
+            >
+              <span class="arch-title">The interface</span
+              ><span class="arch-title">The coordinator</span
+              ><span class="arch-title">The execution fleet</span>
+              <div class="arch-column">
+                <h3>Browser</h3>
+                <p>Chat, projects,<br />fleet visibility</p>
+                <div class="arch-line">
+                  <b>One entry point</b>
+                  <p>Requests and progress</p>
+                </div>
+              </div>
+              <div class="arch-column">
+                <h3>Backend orchestrator</h3>
+                <p>Eligibility, placement,<br />dispatch, conversation state</p>
+                <div class="arch-line">
+                  <b>PostgreSQL</b>
+                  <p>Tasks, decisions, and dispatch outbox</p>
+                </div>
+                <div class="arch-line">
+                  <b>Cloud intelligence</b>
+                  <p>Jev judgments + future hosted agents</p>
+                </div>
+              </div>
+              <div class="arch-column">
+                <h3>Node agent / machine</h3>
+                <p>Discovery, readiness,<br />execution journal</p>
+                <div class="arch-line">
+                  <b>Local models + tools</b>
+                  <p>
+                    Pi execution over Ollama<br />Runtime adapters for other
+                    profiles
+                  </p>
+                </div>
+              </div>
+            </div>
+            <p class="arch-note">
+              The backend coordinates work. Each node executes within its own
+              environment.
+            </p>
+            <div class="slide-footer">
+              <span>React / TypeScript / PostgreSQL / Pi / TypeSafe Jev</span
+              ><span>05 / THE FOUNDATION</span>
+            </div>
+            <template
+              class="speaker-note"
+              data-time="40 seconds"
+              data-sources="../research-docs/architecture.md,../apps/agent-backend/src/routing.ts,../IMPLEMENTATION.md"
+              >The browser speaks to a TypeScript backend. The backend tracks
+              fleet availability, owns the canonical text conversation, checks
+              eligibility, selects placement, and records decisions and dispatch
+              intent in PostgreSQL. Each enrolled machine runs a node agent and
+              executes locally through the Pi SDK and a model runtime such as
+              Ollama. The node journals acceptance before starting. The Jev
+              adapter supplies hosted placement judgments when configured and
+              allowed. Hosted execution adapters are part of the target design.
+              In the first milestone, inference and tools run on the same
+              node.</template
+            >
+          </section>
+
+          <section
+            class="slide"
+            data-title="Eligibility before intelligent routing"
+            aria-labelledby="title-6"
+            hidden
+          >
+            <p class="eyebrow">How a request finds a machine</p>
+            <h2 id="title-6">
+              Eligibility comes before<br /><span class="accent"
+                >intelligent routing</span
+              >
+            </h2>
+            <div class="routing">
+              <div class="route-step">
+                <span class="step-no">01 / FILTER IN CODE</span>
+                <h3>Can it run here?</h3>
+                <p>
+                  Check node health, model readiness, available capacity,
+                  workspace access, and enabled tools.
+                </p>
+              </div>
+              <div class="route-step">
+                <span class="step-no">02 / SELECT A PLACEMENT</span>
+                <h3>Which candidate fits?</h3>
+                <p>
+                  Honor an explicit pin. Use rules for a sole eligible
+                  placement. Ask Jev among alternatives when allowed.
+                </p>
+              </div>
+              <div class="route-step">
+                <span class="step-no">03 / RECORD + DISPATCH</span>
+                <h3>Why this machine?</h3>
+                <p>
+                  Persist the selection and readable reason before sending work
+                  to the node.
+                </p>
+              </div>
+            </div>
+            <p class="route-fact">
+              The model supplies a judgment. Application code enforces
+              eligibility.
+            </p>
+            <div class="slide-footer">
+              <span
+                >Placement quality and latency will be evaluated on the real
+                fleet</span
+              ><span>06 / THE ROUTING IDEA</span>
+            </div>
+            <template
+              class="speaker-note"
+              data-time="40 seconds"
+              data-sources="../apps/agent-backend/src/routing.ts,../research-docs/backend-routing.md"
+              >The important boundary is that routing AI cannot grant
+              permissions or turn an unavailable machine into an eligible one.
+              Code filters candidates first. Manual selection and a sole
+              eligible node do not need an API judgment. For multiple nodes, the
+              implemented Jev integration chooses among the already eligible
+              placements and validates its typed response. The decision and
+              outbox commit before dispatch. We do not claim the selection is
+              the fastest placement: routing latency and quality remain
+              evaluation work. Live Jev calls were mocked in the recorded
+              validation.</template
+            >
+          </section>
+
+          <section
+            class="slide light"
+            data-title="One workspace across machines"
+            aria-labelledby="title-7"
+            hidden
+          >
+            <p class="eyebrow">The user-facing direction</p>
+            <h2 id="title-7">One workspace across<br />your personal cloud</h2>
+            <div class="workspace-rows">
+              <div class="workspace-row">
+                <h3>My cloud</h3>
+                <p>
+                  Inspect machines, model inventory, and execution readiness.
+                </p>
+                <span class="direction">POC FOUNDATION</span>
+              </div>
+              <div class="workspace-row">
+                <h3>Conversations + projects</h3>
+                <p>
+                  Send work, choose a node, inspect its projects, and follow
+                  output.
+                </p>
+                <span class="direction">POC FOUNDATION</span>
+              </div>
+              <div class="workspace-row">
+                <h3>Providers + deployments</h3>
+                <p>
+                  Discover authenticated providers and explicitly start an
+                  eligible model deployment.
+                </p>
+                <span class="direction">DESIGN DIRECTION</span>
+              </div>
+              <div class="workspace-row">
+                <h3>Browser terminals</h3>
+                <p>
+                  Open a shell on a machine and reconnect to an owned tmux
+                  session.
+                </p>
+                <span class="direction">DESIGN DIRECTION</span>
+              </div>
+            </div>
+            <div class="slide-footer">
+              <span
+                >Projects remain tied to their host and explicit access
+                scope</span
+              ><span>07 / THE PRODUCT</span>
+            </div>
+            <template
+              class="speaker-note"
+              data-time="30 seconds"
+              data-sources="../SYSTEM_DESIGN.md,../IMPLEMENTATION.md"
+              >This is the product surface tying the infrastructure together.
+              The POC provides fleet views, model inventory, chat, node pins,
+              and machine-scoped project trees. The target design adds
+              login-aware provider discovery, explicit selected model
+              deployments on compatible NVIDIA machines, and browser PTY/tmux
+              terminals. Files do not magically synchronize across hosts. A
+              project tree root also does not grant execution permission. The
+              eventual household experience will need stronger per-user
+              authorization.</template
+            >
+          </section>
+
+          <section
+            class="slide"
+            data-title="A request through the system"
+            aria-labelledby="title-8"
+            hidden
+          >
+            <p class="eyebrow">Illustrative request walkthrough</p>
+            <h2 id="title-8">One request through the system</h2>
+            <p class="request">
+              “Summarize this project and suggest the next change.”
+            </p>
+            <div class="walkthrough">
+              <div
+                class="walk-tabs"
+                role="tablist"
+                aria-label="Request stages"
+                aria-orientation="vertical"
+              >
+                <button
+                  class="walk-tab"
+                  id="walk-tab-0"
+                  role="tab"
+                  aria-selected="true"
+                  aria-controls="walk-panel"
+                  data-step="0"
+                >
+                  <span>01</span> Send the request
+                </button>
+                <button
+                  class="walk-tab"
+                  id="walk-tab-1"
+                  role="tab"
+                  aria-selected="false"
+                  aria-controls="walk-panel"
+                  tabindex="-1"
+                  data-step="1"
+                >
+                  <span>02</span> Check eligibility
+                </button>
+                <button
+                  class="walk-tab"
+                  id="walk-tab-2"
+                  role="tab"
+                  aria-selected="false"
+                  aria-controls="walk-panel"
+                  tabindex="-1"
+                  data-step="2"
+                >
+                  <span>03</span> Record the route
+                </button>
+                <button
+                  class="walk-tab"
+                  id="walk-tab-3"
+                  role="tab"
+                  aria-selected="false"
+                  aria-controls="walk-panel"
+                  tabindex="-1"
+                  data-step="3"
+                >
+                  <span>04</span> Execute on a node
+                </button>
+                <button
+                  class="walk-tab"
+                  id="walk-tab-4"
+                  role="tab"
+                  aria-selected="false"
+                  aria-controls="walk-panel"
+                  tabindex="-1"
+                  data-step="4"
+                >
+                  <span>05</span> Follow the result
+                </button>
+              </div>
+              <div
+                class="walk-panel"
+                id="walk-panel"
+                role="tabpanel"
+                aria-labelledby="walk-tab-0"
+                tabindex="0"
+              >
+                <span class="label" id="walk-label">Browser / backend</span>
+                <h3 id="walk-heading">A conversation becomes a task</h3>
+                <p id="walk-body">
+                  The user selects a workspace and routing preference. The
+                  backend persists the request with an idempotency key.
+                </p>
+                <button class="walk-next" id="walk-next">Next stage →</button>
+              </div>
+            </div>
+            <div class="slide-footer">
+              <span
+                >Click a stage to explore the flow. This is an explanatory
+                walkthrough.</span
+              ><span>08 / THE DEMO STORY</span>
+            </div>
+            <template
+              class="speaker-note"
+              data-time="50 seconds"
+              data-sources="../research-docs/architecture.md,../README.md,../IMPLEMENTATION.md"
+              >Use the five stage buttons to narrate the request, or press Enter
+              while a stage is focused. This is a self-contained explanatory
+              walkthrough, not a connection to a live backend. In a live product
+              demo, choose a project workspace and explicitly enable the read
+              tool before asking for a project summary. Show the fleet, submit
+              the request, inspect the route explanation, and follow the
+              response. Under the hood, the node journals acceptance before
+              invoking Pi and the backend persists output. The frontend
+              currently polls cumulative output; backend SSE replay is
+              separately implemented.</template
+            >
+          </section>
+
+          <section
+            class="slide lime"
+            data-title="The POC connects the core loop"
+            aria-labelledby="title-9"
+            hidden
+          >
+            <p class="eyebrow">What this proof of concept demonstrates</p>
+            <h2 id="title-9">
+              The infrastructure connects<br />the core execution loop
+            </h2>
+            <div class="proof">
+              <div
+                class="proof-path"
+                aria-label="Execution path: backend, node agent, Pi SDK, local Ollama model"
+              >
+                Backend<span>DISPATCH TO AN ENROLLED MACHINE</span>Node
+                agent<span>JOURNAL ACCEPTANCE AND EXECUTE</span>Pi SDK + local
+                model
+              </div>
+              <div class="proof-details">
+                <p>
+                  <b>Real local inference</b
+                  ><small
+                    >A recorded end-to-end chat ran through Pi and Ollama on an
+                    Apple M4 Pro.</small
+                  >
+                </p>
+                <p>
+                  <b>Fleet-aware requests</b
+                  ><small
+                    >Discovery, model inventory, manual or automatic routing,
+                    and visible decision reasons.</small
+                  >
+                </p>
+                <p>
+                  <b>Durable execution</b
+                  ><small
+                    >Recorded decisions, dispatch outbox, request deduplication,
+                    and persisted output.</small
+                  >
+                </p>
+              </div>
+            </div>
+            <div class="slide-footer">
+              <span
+                >Repository validation: November 8, 2026. Jev judgments were
+                mocked in validation.</span
+              ><span>09 / THE POC</span>
+            </div>
+            <template
+              class="speaker-note"
+              data-time="30 seconds"
+              data-sources="../VALIDATION.md,../IMPLEMENTATION.md"
+              >The goal of the hackathon POC is to establish a credible control
+              and execution foundation. Repository validation records a real
+              backend-to-node-to-Pi-to-Ollama chat on an M4 Pro, along with
+              scripted integration coverage of dispatch, tools, cancellation,
+              persistence, and failure cases. We are not presenting a completed
+              household service or a benchmark win. Jev is integrated but was
+              mocked in the recorded tests.</template
+            >
+          </section>
+
+          <section
+            class="slide light"
+            data-title="Future work"
+            aria-labelledby="title-10"
+            hidden
+          >
+            <p class="eyebrow">Beyond the hackathon</p>
+            <h2 id="title-10">
+              The path to a dependable<br />personal agent cloud
+            </h2>
+            <div class="roadmap">
+              <div class="roadmap-row">
+                <span class="mono">01</span>
+                <h3>Security enforcement</h3>
+                <p>
+                  Per-user and per-node identity, revocation, isolation, and
+                  explicit data and tool boundaries.
+                </p>
+              </div>
+              <div class="roadmap-row">
+                <span class="mono">02</span>
+                <h3>Latency</h3>
+                <p>
+                  Measure the full request path. Improve placement, warm starts,
+                  and queueing.
+                </p>
+              </div>
+              <div class="roadmap-row">
+                <span class="mono">03</span>
+                <h3>System error recovery</h3>
+                <p>
+                  Recover across outages and restarts. Reconcile uncertain
+                  actions before retrying.
+                </p>
+              </div>
+              <div class="roadmap-row">
+                <span class="mono">04</span>
+                <h3>Agent-led management</h3>
+                <p>
+                  Let an agent monitor health, propose repairs, and manage
+                  capacity within enforced policy.
+                </p>
+              </div>
+            </div>
+            <div class="slide-footer">
+              <span
+                >Next step: make the cloud safe, responsive, resilient, and
+                easier to operate</span
+              ><span>10 / FUTURE WORK</span>
+            </div>
+            <template
+              class="speaker-note"
+              data-time="40 seconds"
+              data-sources="../IMPLEMENTATION.md,../research-docs/architecture.md"
+              >The next work falls into the four areas requested for this
+              presentation. Security enforcement extends the trusted-operator
+              POC into explicit household and per-node identities, revocation,
+              and isolation. Latency needs measurement and tuning of the entire
+              path, including judgment and queueing. Recovery must handle actual
+              failures and preserve tool-side-effect safety; the durable POC
+              primitives are only a foundation. Agent-led system management is
+              the longer-term direction: the agent helps operate its own
+              infrastructure under the same enforced policies and appropriate
+              approvals.</template
+            >
+          </section>
+
+          <section
+            class="slide closing"
+            data-title="Your computers, your personal AI cloud"
+            aria-labelledby="title-11"
+            hidden
+          >
+            <div class="closing-brand accent">curilo.</div>
+            <h2 id="title-11">
+              A personal AI cloud,<br />built from the computers<br /><span
+                class="accent"
+                >you already own.</span
+              >
+            </h2>
+            <p class="lede muted">
+              On-device models across your fleet.<br />Cloud intelligence when
+              you need more.
+            </p>
+            <p class="bottom-claim">
+              This POC builds the infrastructure that makes the idea possible.
+            </p>
+            <div class="slide-footer">
+              <span>Personal hardware. Shared household potential.</span
+              ><span>11 / THANK YOU</span>
+            </div>
+            <template
+              class="speaker-note"
+              data-time="15 seconds"
+              data-sources="../research-docs/README.md"
+              >The takeaway is a personal agent cloud built from the machines an
+              individual or family already owns. Local execution and cloud
+              intelligence work together behind one interface. Our POC
+              demonstrates the core infrastructure. Security, latency, recovery,
+              and agent-led management are the path to making it dependable.
+              Thank the audience and invite questions.</template
+            >
+          </section>
+        </div>
+      </main>
+      <footer class="controls" aria-label="Presentation controls">
+        <div class="control-group">
+          <button
+            class="control"
+            id="overview-button"
+            title="Slide overview (O)"
+          >
+            Overview</button
+          ><button
+            class="control"
+            id="notes-button"
+            aria-pressed="false"
+            title="Speaker notes (N)"
+          >
+            Notes</button
+          ><button
+            class="control"
+            id="fullscreen-button"
+            title="Fullscreen (F)"
+          >
+            Fullscreen
+          </button>
+        </div>
+        <span class="key-hint"
+          >← → slides &nbsp; O overview &nbsp; N notes &nbsp; F fullscreen</span
+        >
+        <div class="control-group">
+          <button class="control" id="previous" aria-label="Previous slide">
+            ←</button
+          ><span class="counter" id="counter">01 / 11</span
+          ><button class="control" id="next" aria-label="Next slide">→</button>
+        </div>
+      </footer>
+      <aside class="notes" id="notes" aria-label="Speaker notes">
+        <p class="timing" id="note-time"></p>
+        <h2 id="note-title"></h2>
+        <p id="note-body"></p>
+        <p class="sources" id="note-sources"></p>
+      </aside>
+    </div>
+    <div
+      class="progress"
+      role="progressbar"
+      aria-label="Slide progress"
+      aria-valuemin="1"
+      aria-valuemax="11"
+      aria-valuenow="1"
+    >
+      <span id="progress-fill"></span>
+    </div>
+    <div
+      class="sr-only"
+      role="status"
+      aria-live="polite"
+      id="announcement"
+    ></div>
+    <dialog id="overview" aria-labelledby="overview-title">
+      <div class="dialog-heading">
+        <h2 id="overview-title">The story at a glance</h2>
+        <button class="control" id="overview-close" aria-label="Close overview">
+          Close ×
+        </button>
+      </div>
+      <div class="overview-grid" id="overview-grid"></div>
+    </dialog>
+    <script>
+      (() => {
+        const slides = [...document.querySelectorAll(".slide")];
+        const $ = (id) => document.getElementById(id);
+        const overview = $("overview");
+        const notePanel = $("notes");
+        let index = 0;
+        let step = 0;
+        const steps = [
+          [
+            "Browser / backend",
+            "A conversation becomes a task",
+            "The user selects a workspace and routing preference. The backend persists the request with an idempotency key.",
+          ],
+          [
+            "Backend / eligibility",
+            "Only eligible placements remain",
+            "The backend checks online nodes, ready models, capacity, and access to the requested workspace and tools. A pin narrows the candidate set.",
+          ],
+          [
+            "Backend / routing + PostgreSQL",
+            "A placement with a recorded reason",
+            "Rules or an allowed Jev judgment select an eligible placement. The backend commits the decision and dispatch outbox before contacting the node.",
+          ],
+          [
+            "Node agent / Pi / local model",
+            "The selected machine does the work",
+            "The node journals acceptance, then invokes Pi with the selected model, workspace, and allowed tools. Repeated execution IDs reuse the accepted run.",
+          ],
+          [
+            "Node / backend / browser",
+            "Output returns to one conversation",
+            "The backend persists progress and the assistant response. The frontend polls cumulative output so the user can follow the result and resume by conversation ID.",
+          ],
+        ];
+        const tabs = [...document.querySelectorAll(".walk-tab")];
+        function setStep(value, focus = false) {
+          step = (value + steps.length) % steps.length;
+          tabs.forEach((tab, i) => {
+            tab.setAttribute("aria-selected", String(i === step));
+            tab.tabIndex = i === step ? 0 : -1;
+          });
+          $("walk-label").textContent = steps[step][0];
+          $("walk-heading").textContent = steps[step][1];
+          $("walk-body").textContent = steps[step][2];
+          $("walk-panel").setAttribute("aria-labelledby", `walk-tab-${step}`);
+          $("walk-next").textContent =
+            step === steps.length - 1
+              ? "Restart walkthrough ↻"
+              : "Next stage →";
+          if (focus) tabs[step].focus();
+        }
+        tabs.forEach((tab, i) => {
+          tab.addEventListener("click", () => setStep(i));
+          tab.addEventListener("keydown", (event) => {
+            if (
+              [
+                "ArrowDown",
+                "ArrowRight",
+                "ArrowUp",
+                "ArrowLeft",
+                "Home",
+                "End",
+              ].includes(event.key)
+            ) {
+              event.preventDefault();
+              event.stopPropagation();
+              setStep(
+                event.key === "Home"
+                  ? 0
+                  : event.key === "End"
+                    ? steps.length - 1
+                    : step +
+                      (["ArrowUp", "ArrowLeft"].includes(event.key) ? -1 : 1),
+                true,
+              );
+            }
+          });
+        });
+        $("walk-next").addEventListener("click", () => setStep(step + 1));
+        const pad = (value) => String(value).padStart(2, "0");
+        slides.forEach((slide, i) => {
+          const button = document.createElement("button");
+          button.className = "overview-item";
+          const number = document.createElement("span");
+          number.textContent = `${pad(i + 1)} / ${pad(slides.length)}`;
+          button.append(number, document.createTextNode(slide.dataset.title));
+          button.addEventListener("click", () => {
+            overview.close();
+            go(i);
+          });
+          $("overview-grid").append(button);
+        });
+        function go(value, updateUrl = true) {
+          index = Math.max(0, Math.min(slides.length - 1, value));
+          slides.forEach((slide, i) => {
+            slide.hidden = i !== index;
+            slide.inert = i !== index;
+            slide.classList.toggle("active", i === index);
+          });
+          const slide = slides[index];
+          $("counter").textContent =
+            `${pad(index + 1)} / ${pad(slides.length)}`;
+          $("previous").disabled = index === 0;
+          $("next").disabled = index === slides.length - 1;
+          $("progress-fill").style.width =
+            `${((index + 1) / slides.length) * 100}%`;
+          document
+            .querySelector(".progress")
+            .setAttribute("aria-valuenow", index + 1);
+          $("announcement").textContent =
+            `Slide ${index + 1} of ${slides.length}: ${slide.dataset.title}`;
+          document.title = `Curilo · ${slide.dataset.title}`;
+          [...$("overview-grid").children].forEach((button, i) =>
+            button.setAttribute("aria-current", String(i === index)),
+          );
+          const note = slide.querySelector(".speaker-note");
+          $("note-title").textContent = slide.dataset.title;
+          $("note-time").textContent =
+            `Suggested pace: ${note.dataset.time} / About 6 minutes total`;
+          $("note-body").textContent = note.content.textContent.trim();
+          $("note-sources").replaceChildren(
+            document.createTextNode("Repository sources: "),
+          );
+          note.dataset.sources.split(",").forEach((source, i) => {
+            if (i) $("note-sources").append(document.createTextNode(" · "));
+            const link = document.createElement("a");
+            link.href = source;
+            link.textContent = source.replace("../", "");
+            link.target = "_blank";
+            link.rel = "noopener";
+            $("note-sources").append(link);
+          });
+          if (updateUrl) history.replaceState(null, "", `#slide-${index + 1}`);
+        }
+        function fromHash() {
+          const match = location.hash.match(/^#slide-(\d+)$/);
+          go(match ? Number(match[1]) - 1 : 0, false);
+        }
+        function toggleNotes() {
+          const open = notePanel.classList.toggle("open");
+          $("notes-button").setAttribute("aria-pressed", String(open));
+        }
+        async function toggleFullscreen() {
+          try {
+            if (document.fullscreenElement) await document.exitFullscreen();
+            else if (document.documentElement.requestFullscreen)
+              await document.documentElement.requestFullscreen();
+          } catch {
+            $("announcement").textContent =
+              "Fullscreen is unavailable. You can use your browser’s fullscreen command.";
+          }
+        }
+        function showOverview() {
+          overview.showModal();
+          const current = $("overview-grid").children[index];
+          current.focus();
+        }
+        $("previous").addEventListener("click", () => go(index - 1));
+        $("next").addEventListener("click", () => go(index + 1));
+        $("notes-button").addEventListener("click", toggleNotes);
+        $("fullscreen-button").addEventListener("click", toggleFullscreen);
+        $("overview-button").addEventListener("click", showOverview);
+        $("overview-close").addEventListener("click", () => overview.close());
+        overview.addEventListener("click", (event) => {
+          if (event.target === overview) {
+            const r = overview.getBoundingClientRect();
+            if (
+              event.clientX < r.left ||
+              event.clientX > r.right ||
+              event.clientY < r.top ||
+              event.clientY > r.bottom
+            )
+              overview.close();
+          }
+        });
+        document.addEventListener("fullscreenchange", () => {
+          $("fullscreen-button").textContent = document.fullscreenElement
+            ? "Exit fullscreen"
+            : "Fullscreen";
+        });
+        document.addEventListener("keydown", (event) => {
+          if (
+            overview.open ||
+            event.altKey ||
+            event.metaKey ||
+            event.ctrlKey ||
+            /INPUT|TEXTAREA|SELECT/.test(event.target.tagName)
+          )
+            return;
+          if (event.key === " " && event.target.closest("button, a")) return;
+          const actions = {
+            ArrowRight: () => go(index + 1),
+            PageDown: () => go(index + 1),
+            " ": () => go(index + 1),
+            ArrowLeft: () => go(index - 1),
+            PageUp: () => go(index - 1),
+            Home: () => go(0),
+            End: () => go(slides.length - 1),
+            o: showOverview,
+            n: toggleNotes,
+            f: toggleFullscreen,
+          };
+          const action =
+            actions[
+              event.key.length === 1 ? event.key.toLowerCase() : event.key
+            ];
+          if (action) {
+            event.preventDefault();
+            action();
+          }
+        });
+        let touch;
+        $("stage").addEventListener(
+          "touchstart",
+          (event) => {
+            if (!event.target.closest("button, a"))
+              touch = {
+                x: event.changedTouches[0].clientX,
+                y: event.changedTouches[0].clientY,
+              };
+          },
+          { passive: true },
+        );
+        $("stage").addEventListener(
+          "touchend",
+          (event) => {
+            if (!touch) return;
+            const dx = event.changedTouches[0].clientX - touch.x,
+              dy = event.changedTouches[0].clientY - touch.y;
+            if (Math.abs(dx) > 70 && Math.abs(dy) < 50)
+              go(index + (dx < 0 ? 1 : -1));
+            touch = null;
+          },
+          { passive: true },
+        );
+        window.addEventListener("hashchange", fromHash);
+        let beforePrintInert;
+        window.addEventListener("beforeprint", () => {
+          beforePrintInert = slides.map((slide) => slide.inert);
+          slides.forEach((slide) => {
+            slide.inert = false;
+          });
+        });
+        window.addEventListener("afterprint", () => {
+          slides.forEach((slide, i) => {
+            slide.inert = beforePrintInert?.[i] ?? i !== index;
+          });
+        });
+        fromHash();
+      })();
+    </script>
+  </body>
+</html>
