@@ -4,6 +4,7 @@ import {
   Outlet,
   useBlocker,
   useNavigate,
+  useMatchRoute,
   useParams,
 } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -42,9 +43,9 @@ import {
   Square,
   Terminal,
   Unplug,
-  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { WorkspaceList } from "@/components/workspace-list";
 import { ConversationList } from "@/components/conversation-list";
 import { ChatMessage } from "@/components/chat-message";
 import {
@@ -225,7 +226,8 @@ function ChatWorkspace({
   const { conversationId: routeConversationId } = useParams({ strict: false });
   const conversationId = routeConversationId ?? null;
   const [draft, setDraft] = useState("");
-  const [fleetOpen, setFleetOpen] = useState(false);
+  const matchRoute = useMatchRoute();
+  const isMyCloud = !!matchRoute({ to: "/my-cloud" });
   const [routing, setRouting] = useState("auto");
   const [modelId, setModelId] = useState("");
   const [workspaceId, setWorkspaceId] = useState("default");
@@ -586,7 +588,7 @@ function ChatWorkspace({
     !!conversationQuery.error;
 
   return (
-    <div className={`workspace-shell ${fleetOpen ? "fleet-open" : ""}`}>
+    <div className="workspace-shell">
       <aside className="sidebar" aria-label="Workspace navigation">
         <Link className="brand" to="/" aria-label="Curilo Agent home">
           <span className="brand-mark">
@@ -608,41 +610,48 @@ function ChatWorkspace({
         >
           <Plus /> New conversation
         </Button>
-        <div className="sidebar-label">WORKSPACE</div>
-        <button
-          className="nav-item fleet-toggle"
-          aria-expanded={fleetOpen}
-          aria-controls="connected-nodes"
-          onClick={() => setFleetOpen((open) => !open)}
-        >
-          <Network size={16} /> Connected nodes
-          <span className="count">{onlineNodes.length}</span>
-        </button>
-        <button className="nav-item connection-control" onClick={onSettings}>
-          <Settings2 size={16} /> Connection settings
-        </button>
-        {connection && (
-          <button
-            className="nav-item connection-control"
-            onClick={onDisconnect}
-          >
-            <Unplug size={16} /> Disconnect
-          </button>
-        )}
-        {connection && (
-          <ConversationList
-            conversations={conversationsQuery.data?.conversations ?? []}
-            selectedId={conversationId}
-            loading={conversationsQuery.isPending}
-            error={
-              conversationsQuery.error
-                ? errorText(conversationsQuery.error)
-                : null
-            }
+        <WorkspaceList
+          key={connection?.baseUrl ?? "disconnected"}
+          nodes={nodes}
+          backendUrl={connection?.baseUrl ?? null}
+          loading={!!connection && nodesQuery.isPending}
+          error={nodesQuery.error ? errorText(nodesQuery.error) : null}
+        />
+        <ConversationList
+          conversations={conversationsQuery.data?.conversations ?? []}
+          selectedId={conversationId}
+          loading={!!connection && conversationsQuery.isPending}
+          error={
+            conversationsQuery.error
+              ? errorText(conversationsQuery.error)
+              : null
+          }
+          disabled={active || submitting || !!pending}
+          onRetry={() => void conversationsQuery.refetch()}
+        />
+        <section className="settings-navigation" aria-label="Settings">
+          <div className="sidebar-label">SETTINGS</div>
+          <Link
+            className={`nav-item connection-control ${isMyCloud ? "nav-active" : ""}`}
+            to="/my-cloud"
+            aria-current={isMyCloud ? "page" : undefined}
             disabled={active || submitting || !!pending}
-            onRetry={() => void conversationsQuery.refetch()}
-          />
-        )}
+          >
+            <Network size={16} /> My cloud
+            <span className="count">{onlineNodes.length}</span>
+          </Link>
+          <button className="nav-item connection-control" onClick={onSettings}>
+            <Settings2 size={16} /> Connection settings
+          </button>
+          {connection && (
+            <button
+              className="nav-item connection-control"
+              onClick={onDisconnect}
+            >
+              <Unplug size={16} /> Disconnect
+            </button>
+          )}
+        </section>
         <div className="sidebar-bottom">
           <span className="avatar">P</span>
           <div>
@@ -659,7 +668,11 @@ function ChatWorkspace({
           <div>
             <span className="breadcrumb">Workspace</span>
             <span className="slash">/</span>
-            {conversationId ? "Conversation" : "New conversation"}
+            {isMyCloud
+              ? "My cloud"
+              : conversationId
+                ? "Conversation"
+                : "New conversation"}
           </div>
           <button
             className={`connection-badge ${connection && !nodesQuery.error ? "is-connected" : ""}`}
@@ -673,455 +686,457 @@ function ChatWorkspace({
                 : "Backend connected"}
           </button>
         </header>
-        {conversationId && (
-          <div className="conversation-reference">
-            Conversation <code>{conversationId}</code>
-          </div>
-        )}
-        <div
-          className={`conversation-area ${conversationId ? "has-conversation" : ""}`}
-        >
-          <div
-            className="conversation-scroll"
-            ref={conversationScroll}
-            tabIndex={0}
-            role="region"
-            aria-label="Conversation content"
-          >
-            {!conversationId ? (
-              <section className="welcome" aria-labelledby="welcome-heading">
-                <div className="eyebrow">
-                  <span /> ONE AGENT. YOUR MACHINES.
-                </div>
-                <h1 id="welcome-heading">
-                  What would you
-                  <br />
-                  like to build?
-                </h1>
-                <p>
-                  Your agent finds the right machine for the job.
-                  <br className="desktop-break" /> Keep the conversation here,
-                  wherever the work runs.
-                </p>
-                <div className="suggestions">
-                  {suggestions.map((suggestion, index) => (
-                    <button
-                      key={suggestion}
-                      onClick={() => setDraft(suggestion)}
-                    >
-                      <span className="suggestion-icon">
-                        {index === 0 ? (
-                          <Terminal size={18} />
-                        ) : index === 1 ? (
-                          <Cpu size={18} />
-                        ) : (
-                          <Sparkles size={18} />
-                        )}
-                      </span>
-                      {suggestion}
-                      <ArrowUpRight size={15} />
-                    </button>
-                  ))}
-                </div>
-              </section>
-            ) : (
-              <section
-                className="message-list"
-                aria-label="Conversation messages"
-                aria-busy={conversationQuery.isPending}
-              >
-                {conversationQuery.isPending && (
-                  <p className="muted-note">Loading conversation…</p>
-                )}
-                {conversation?.messages.map((message) => (
-                  <ChatMessage
-                    key={message.id}
-                    role={message.role}
-                    text={message.text}
-                    onDelete={() => deleteMessage(message.id)}
-                    deleteDisabledReason={
-                      active || submitting || pending
-                        ? "Wait for the current task or submission to finish before deleting."
-                        : deletingMessage
-                          ? "Deleting a message…"
-                          : undefined
+        {isMyCloud ? (
+          <section className="cloud-page" aria-labelledby="fleet-heading">
+            <div className="fleet-heading">
+              <h2 id="fleet-heading">Your nodes</h2>
+              <span className="count">
+                {onlineNodes.length}/{nodes.length}
+              </span>
+              {connection && (
+                <button
+                  className="icon-refresh"
+                  aria-label="Refresh nodes"
+                  onClick={() => void nodesQuery.refetch()}
+                >
+                  <RefreshCw size={13} />
+                </button>
+              )}
+            </div>
+            <p className="fleet-description">The machines behind your agent.</p>
+            {nodesQuery.error && (
+              <p className="error-banner" role="alert">
+                {errorText(nodesQuery.error)} Cached nodes may be stale.
+              </p>
+            )}
+            {connection && nodesQuery.isPending ? (
+              <p className="muted-note">Loading nodes…</p>
+            ) : nodes.length ? (
+              <div className="node-list">
+                {nodes.map((node) => (
+                  <NodeCard
+                    key={node.nodeId}
+                    node={node}
+                    pinned={routing === node.nodeId}
+                    onPin={() => setRouting(node.nodeId)}
+                    onSelectModel={(profileId) =>
+                      selectModel(node.nodeId, profileId)
                     }
+                    disabled={submitting || !!pending || !!nodesQuery.error}
                   />
                 ))}
-                {task &&
-                  output !== null &&
-                  (output || isTaskActive(task.status)) && (
-                    <ChatMessage
-                      key={task.id}
-                      role="assistant"
-                      text={output || "Waiting for the model…"}
-                      status={task.status}
-                      deleteDisabledReason="Wait for this message to finish and be saved before deleting."
-                    />
-                  )}
-                {task?.error && (
-                  <p className="error-banner" role="alert">
-                    {task.error}
-                  </p>
-                )}
-                {task?.status === "unknown" && (
-                  <p className="error-banner">
-                    Execution outcome is unknown. The task is not automatically
-                    replayed; inspect the node before repeating any tool action.
-                  </p>
-                )}
-                {task?.status === "cancelled" && (
-                  <p className="muted-note">
-                    Task cancelled. Tool actions completed before cancellation
-                    may remain.
-                  </p>
-                )}
-              </section>
-            )}
-            {(conversationQuery.error || taskQuery.error) && (
-              <p className="error-banner" role="alert">
-                {errorText(conversationQuery.error ?? taskQuery.error)}{" "}
-                <button
-                  onClick={() => {
-                    void conversationQuery.refetch();
-                    if (taskId) void taskQuery.refetch();
-                  }}
-                >
-                  Refresh status
-                </button>
-              </p>
-            )}
-            {latestDecision && (
-              <section className="decision-strip" aria-label="Routing decision">
-                <Sparkles size={15} />
-                <div>
-                  <strong>
-                    {nodes.find((node) => node.nodeId === latestDecision.nodeId)
-                      ?.name ?? latestDecision.nodeId}{" "}
-                    · {latestDecision.profileId}
-                  </strong>
-                  <p>{latestDecision.reason}</p>
-                  <small>
-                    {latestDecision.provider === "jev"
-                      ? "Jev judgment"
-                      : "Rules fallback"}{" "}
-                    · {Math.round(latestDecision.latencyMs)} ms routing ·{" "}
-                    {task?.status}
-                  </small>
-                </div>
-              </section>
-            )}
-            {decisionsQuery.error && (
-              <p className="muted-note">
-                Decision history unavailable: {errorText(decisionsQuery.error)}
-              </p>
-            )}
-          </div>
-          <section className="composer-area" aria-label="Message composer">
-            <form
-              className="composer"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (!sendDisabled) void performSubmit();
-              }}
-            >
-              <label className="sr-only" htmlFor="message">
-                Message your agent
-              </label>
-              <textarea
-                id="message"
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (
-                    event.key !== "Enter" ||
-                    event.shiftKey ||
-                    event.altKey ||
-                    event.nativeEvent.isComposing ||
-                    event.nativeEvent.keyCode === 229
-                  )
-                    return;
-                  event.preventDefault();
-                  if (!event.repeat) event.currentTarget.form?.requestSubmit();
-                }}
-                maxLength={32_000}
-                placeholder="Describe a task, ask a question, or share an idea…"
-                rows={3}
-                disabled={submitting || !!pending}
-              />
-              <div className="composer-toolbar">
-                <div className="composer-routing">
-                  <label className="route-select model-select">
-                    <Cpu size={14} aria-hidden="true" />
-                    <select
-                      aria-label="Model"
-                      title="Route to nodes with this model active and ready"
-                      value={modelId}
-                      disabled={
-                        !connection ||
-                        submitting ||
-                        !!pending ||
-                        !!nodesQuery.error
-                      }
-                      onChange={(event) => setModelId(event.target.value)}
-                    >
-                      <option value="">Auto model</option>
-                      {modelId && !models.includes(modelId) && (
-                        <option value={modelId}>{modelId} · unavailable</option>
-                      )}
-                      {models.map((model) => (
-                        <option key={model} value={model}>
-                          {model}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="route-select">
-                    <Sparkles size={14} />
-                    <select
-                      aria-label="Routing mode or pinned node"
-                      value={routing}
-                      disabled={submitting || !!pending}
-                      onChange={(event) => setRouting(event.target.value)}
-                    >
-                      <option value="auto">Auto routing</option>
-                      {routing !== "auto" &&
-                        !nodes.some((node) => node.nodeId === routing) && (
-                          <option value={routing}>
-                            Pinned node · unavailable
-                          </option>
-                        )}
-                      {nodes.map((node) => (
-                        <option key={node.nodeId} value={node.nodeId}>
-                          {node.name} · {node.status}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                {active ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void cancelTask()}
-                    disabled={cancelling}
-                  >
-                    <Square />
-                    {cancelling ? "Cancelling…" : "Cancel"}
-                  </Button>
-                ) : (
-                  <Button
-                    type="submit"
-                    size="icon"
-                    disabled={sendDisabled}
-                    aria-label="Send message"
-                    aria-describedby="send-status"
-                  >
-                    <ArrowUp />
-                  </Button>
-                )}
               </div>
-              <details className="task-options">
-                <summary>Task permissions and routing policy</summary>
-                <label className="workspace-field">
-                  Workspace ID
-                  <input
-                    value={workspaceId}
-                    maxLength={128}
-                    disabled={submitting || !!pending}
-                    onChange={(event) => setWorkspaceId(event.target.value)}
-                  />
-                </label>
-                <fieldset disabled={submitting || !!pending}>
-                  <legend>Allowed tools for this task</legend>
-                  <div className="tool-options">
-                    {enabledToolSchema.options.map((tool) => (
-                      <label key={tool}>
-                        <input
-                          type="checkbox"
-                          checked={allowedTools.includes(tool)}
-                          onChange={(event) =>
-                            setAllowedTools((current) =>
-                              event.target.checked
-                                ? [...current, tool]
-                                : current.filter((item) => item !== tool),
-                            )
+            ) : (
+              <div className="empty-fleet">
+                <div className="empty-icon">
+                  <Network size={28} />
+                </div>
+                <h3>
+                  {connection ? "No nodes registered" : "No backend connected"}
+                </h3>
+                <p>
+                  {connection
+                    ? "Start a node agent on a machine to make its models and enabled tools available here."
+                    : "Connect your backend to discover your machines."}
+                </p>
+                <span className="waiting">
+                  <Radio size={13} />
+                  {connection
+                    ? "Checking every 3 seconds"
+                    : "Connection required"}
+                </span>
+              </div>
+            )}
+            <div className="routing-card">
+              <span className="routing-icon">
+                <Sparkles size={17} />
+              </span>
+              <h3>
+                {routing === "auto" ? "Auto routing" : "Explicit node routing"}
+              </h3>
+              <p>
+                {routing === "auto"
+                  ? "Jev or permitted rules select among eligible machines."
+                  : "Tasks stay pinned to this node. An unavailable node will not silently be replaced."}
+              </p>
+              <div>
+                <Check size={13} /> One continuous conversation
+              </div>
+              <div>
+                <Check size={13} /> Permissions checked before routing
+              </div>
+            </div>
+            <div className="fleet-footer">
+              <ShieldCheck size={15} />
+              <span>
+                Only explicitly enabled tools
+                <br />
+                are available to your agent.
+              </span>
+            </div>
+          </section>
+        ) : (
+          <>
+            {conversationId && (
+              <div className="conversation-reference">
+                Conversation <code>{conversationId}</code>
+              </div>
+            )}
+            <div
+              className={`conversation-area ${conversationId ? "has-conversation" : ""}`}
+            >
+              <div
+                className="conversation-scroll"
+                ref={conversationScroll}
+                tabIndex={0}
+                role="region"
+                aria-label="Conversation content"
+              >
+                <div className="conversation-inner">
+                  {!conversationId ? (
+                    <section
+                      className="welcome"
+                      aria-labelledby="welcome-heading"
+                    >
+                      <div className="eyebrow">
+                        <span /> ONE AGENT. YOUR MACHINES.
+                      </div>
+                      <h1 id="welcome-heading">
+                        What would you
+                        <br />
+                        like to build?
+                      </h1>
+                      <p>
+                        Your agent finds the right machine for the job.
+                        <br className="desktop-break" /> Keep the conversation
+                        here, wherever the work runs.
+                      </p>
+                      <div className="suggestions">
+                        {suggestions.map((suggestion, index) => (
+                          <button
+                            key={suggestion}
+                            onClick={() => setDraft(suggestion)}
+                          >
+                            <span className="suggestion-icon">
+                              {index === 0 ? (
+                                <Terminal size={18} />
+                              ) : index === 1 ? (
+                                <Cpu size={18} />
+                              ) : (
+                                <Sparkles size={18} />
+                              )}
+                            </span>
+                            {suggestion}
+                            <ArrowUpRight size={15} />
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  ) : (
+                    <section
+                      className="message-list"
+                      aria-label="Conversation messages"
+                      aria-busy={conversationQuery.isPending}
+                    >
+                      {conversationQuery.isPending && (
+                        <p className="muted-note">Loading conversation…</p>
+                      )}
+                      {conversation?.messages.map((message) => (
+                        <ChatMessage
+                          key={message.id}
+                          role={message.role}
+                          text={message.text}
+                          onDelete={() => deleteMessage(message.id)}
+                          deleteDisabledReason={
+                            active || submitting || pending
+                              ? "Wait for the current task or submission to finish before deleting."
+                              : deletingMessage
+                                ? "Deleting a message…"
+                                : undefined
                           }
                         />
-                        {tool}
+                      ))}
+                      {task &&
+                        output !== null &&
+                        (output || isTaskActive(task.status)) && (
+                          <ChatMessage
+                            key={task.id}
+                            role="assistant"
+                            text={output || "Waiting for the model…"}
+                            status={task.status}
+                            deleteDisabledReason="Wait for this message to finish and be saved before deleting."
+                          />
+                        )}
+                      {task?.error && (
+                        <p className="error-banner" role="alert">
+                          {task.error}
+                        </p>
+                      )}
+                      {task?.status === "unknown" && (
+                        <p className="error-banner">
+                          Execution outcome is unknown. The task is not
+                          automatically replayed; inspect the node before
+                          repeating any tool action.
+                        </p>
+                      )}
+                      {task?.status === "cancelled" && (
+                        <p className="muted-note">
+                          Task cancelled. Tool actions completed before
+                          cancellation may remain.
+                        </p>
+                      )}
+                    </section>
+                  )}
+                  {(conversationQuery.error || taskQuery.error) && (
+                    <p className="error-banner" role="alert">
+                      {errorText(conversationQuery.error ?? taskQuery.error)}{" "}
+                      <button
+                        onClick={() => {
+                          void conversationQuery.refetch();
+                          if (taskId) void taskQuery.refetch();
+                        }}
+                      >
+                        Refresh status
+                      </button>
+                    </p>
+                  )}
+                  {latestDecision && (
+                    <section
+                      className="decision-strip"
+                      aria-label="Routing decision"
+                    >
+                      <Sparkles size={15} />
+                      <div>
+                        <strong>
+                          {nodes.find(
+                            (node) => node.nodeId === latestDecision.nodeId,
+                          )?.name ?? latestDecision.nodeId}{" "}
+                          · {latestDecision.profileId}
+                        </strong>
+                        <p>{latestDecision.reason}</p>
+                        <small>
+                          {latestDecision.provider === "jev"
+                            ? "Jev judgment"
+                            : "Rules fallback"}{" "}
+                          · {Math.round(latestDecision.latencyMs)} ms routing ·{" "}
+                          {task?.status}
+                        </small>
+                      </div>
+                    </section>
+                  )}
+                  {decisionsQuery.error && (
+                    <p className="muted-note">
+                      Decision history unavailable:{" "}
+                      {errorText(decisionsQuery.error)}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <section className="composer-area" aria-label="Message composer">
+                <form
+                  className="composer"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!sendDisabled) void performSubmit();
+                  }}
+                >
+                  <label className="sr-only" htmlFor="message">
+                    Message your agent
+                  </label>
+                  <textarea
+                    id="message"
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (
+                        event.key !== "Enter" ||
+                        event.shiftKey ||
+                        event.altKey ||
+                        event.nativeEvent.isComposing ||
+                        event.nativeEvent.keyCode === 229
+                      )
+                        return;
+                      event.preventDefault();
+                      if (!event.repeat)
+                        event.currentTarget.form?.requestSubmit();
+                    }}
+                    maxLength={32_000}
+                    placeholder="Describe a task, ask a question, or share an idea…"
+                    rows={conversationId ? 2 : 3}
+                    disabled={submitting || !!pending}
+                  />
+                  <div className="composer-toolbar">
+                    <div className="composer-routing">
+                      <label className="route-select model-select">
+                        <Cpu size={14} aria-hidden="true" />
+                        <select
+                          aria-label="Model"
+                          title="Route to nodes with this model active and ready"
+                          value={modelId}
+                          disabled={
+                            !connection ||
+                            submitting ||
+                            !!pending ||
+                            !!nodesQuery.error
+                          }
+                          onChange={(event) => setModelId(event.target.value)}
+                        >
+                          <option value="">Auto model</option>
+                          {modelId && !models.includes(modelId) && (
+                            <option value={modelId}>
+                              {modelId} · unavailable
+                            </option>
+                          )}
+                          {models.map((model) => (
+                            <option key={model} value={model}>
+                              {model}
+                            </option>
+                          ))}
+                        </select>
                       </label>
-                    ))}
+                      <label className="route-select">
+                        <Sparkles size={14} />
+                        <select
+                          aria-label="Routing mode or pinned node"
+                          value={routing}
+                          disabled={submitting || !!pending}
+                          onChange={(event) => setRouting(event.target.value)}
+                        >
+                          <option value="auto">Auto routing</option>
+                          {routing !== "auto" &&
+                            !nodes.some((node) => node.nodeId === routing) && (
+                              <option value={routing}>
+                                Pinned node · unavailable
+                              </option>
+                            )}
+                          {nodes.map((node) => (
+                            <option key={node.nodeId} value={node.nodeId}>
+                              {node.name} · {node.status}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    {active ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void cancelTask()}
+                        disabled={cancelling}
+                      >
+                        <Square />
+                        {cancelling ? "Cancelling…" : "Cancel"}
+                      </Button>
+                    ) : (
+                      <Button
+                        type="submit"
+                        size="icon"
+                        className="composer-send"
+                        disabled={sendDisabled}
+                        aria-label="Send message"
+                        aria-describedby="send-status"
+                      >
+                        <ArrowUp />
+                      </Button>
+                    )}
                   </div>
-                </fieldset>
-                <p className="permission-note">
-                  Coding tools are enabled by default. Uncheck tools to disable
-                  them for this task. Bash can execute commands; the working
-                  directory is not a sandbox.
+                  <details className="task-options">
+                    <summary>Task permissions and routing policy</summary>
+                    <label className="workspace-field">
+                      Workspace ID
+                      <input
+                        value={workspaceId}
+                        maxLength={128}
+                        disabled={submitting || !!pending}
+                        onChange={(event) => setWorkspaceId(event.target.value)}
+                      />
+                    </label>
+                    <fieldset disabled={submitting || !!pending}>
+                      <legend>Allowed tools for this task</legend>
+                      <div className="tool-options">
+                        {enabledToolSchema.options.map((tool) => (
+                          <label key={tool}>
+                            <input
+                              type="checkbox"
+                              checked={allowedTools.includes(tool)}
+                              onChange={(event) =>
+                                setAllowedTools((current) =>
+                                  event.target.checked
+                                    ? [...current, tool]
+                                    : current.filter((item) => item !== tool),
+                                )
+                              }
+                            />
+                            {tool}
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+                    <p className="permission-note">
+                      Coding tools are enabled by default. Uncheck tools to
+                      disable them for this task. Bash can execute commands; the
+                      working directory is not a sandbox.
+                    </p>
+                    <label className="policy-check">
+                      <input
+                        type="checkbox"
+                        checked={allowHostedJudgment}
+                        disabled={submitting || !!pending}
+                        onChange={(event) =>
+                          setAllowHostedJudgment(event.target.checked)
+                        }
+                      />
+                      Allow hosted Jev judgment to inspect routing context
+                    </label>
+                    <label className="policy-check">
+                      <input
+                        type="checkbox"
+                        checked={allowRulesFallback}
+                        disabled={submitting || !!pending}
+                        onChange={(event) =>
+                          setAllowRulesFallback(event.target.checked)
+                        }
+                      />
+                      Allow deterministic rules if Jev is unavailable or
+                      disabled
+                    </label>
+                  </details>
+                </form>
+                {actionError && (
+                  <p className="error-banner" role="alert">
+                    {actionError}
+                  </p>
+                )}
+                {pending && !submitting && (
+                  <Button
+                    variant="outline"
+                    onClick={() => void performSubmit(pending)}
+                  >
+                    <RefreshCw /> Retry same submission
+                  </Button>
+                )}
+                <p id="send-status" className="composer-note">
+                  {!connection
+                    ? "Connect your backend to begin."
+                    : submitting
+                      ? "Submitting your task…"
+                      : pending
+                        ? "Resolve the pending submission before starting another task."
+                        : task?.status === "unknown"
+                          ? "Execution outcome is unknown. Waiting for the backend to reconcile; this task will not be replayed."
+                          : active
+                            ? "Your task is running. Output refreshes automatically."
+                            : nodesQuery.error
+                              ? "Node availability cannot be verified while the backend is unreachable."
+                              : (routingProblem ??
+                                "Ready. Your selected permissions apply only to the next task.")}
                 </p>
-                <label className="policy-check">
-                  <input
-                    type="checkbox"
-                    checked={allowHostedJudgment}
-                    disabled={submitting || !!pending}
-                    onChange={(event) =>
-                      setAllowHostedJudgment(event.target.checked)
-                    }
-                  />
-                  Allow hosted Jev judgment to inspect routing context
-                </label>
-                <label className="policy-check">
-                  <input
-                    type="checkbox"
-                    checked={allowRulesFallback}
-                    disabled={submitting || !!pending}
-                    onChange={(event) =>
-                      setAllowRulesFallback(event.target.checked)
-                    }
-                  />
-                  Allow deterministic rules if Jev is unavailable or disabled
-                </label>
-              </details>
-            </form>
-            {actionError && (
-              <p className="error-banner" role="alert">
-                {actionError}
-              </p>
-            )}
-            {pending && !submitting && (
-              <Button
-                variant="outline"
-                onClick={() => void performSubmit(pending)}
-              >
-                <RefreshCw /> Retry same submission
-              </Button>
-            )}
-            <p id="send-status" className="composer-note">
-              {!connection
-                ? "Connect your backend to begin."
-                : submitting
-                  ? "Submitting your task…"
-                  : pending
-                    ? "Resolve the pending submission before starting another task."
-                    : task?.status === "unknown"
-                      ? "Execution outcome is unknown. Waiting for the backend to reconcile; this task will not be replayed."
-                      : active
-                        ? "Your task is running. Output refreshes automatically."
-                        : nodesQuery.error
-                          ? "Node availability cannot be verified while the backend is unreachable."
-                          : (routingProblem ??
-                            "Ready. Your selected permissions apply only to the next task.")}
-            </p>
-          </section>
-        </div>
-      </main>
-      {fleetOpen && (
-        <button
-          className="fleet-backdrop"
-          aria-label="Close connected nodes"
-          onClick={() => setFleetOpen(false)}
-        />
-      )}
-      <aside
-        id="connected-nodes"
-        className="fleet-panel"
-        aria-labelledby="fleet-heading"
-        onKeyDown={(event) => {
-          if (event.key === "Escape") setFleetOpen(false);
-        }}
-      >
-        <div className="fleet-heading">
-          <h2 id="fleet-heading">Your nodes</h2>
-          <span className="count">
-            {onlineNodes.length}/{nodes.length}
-          </span>
-          {connection && (
-            <button
-              className="icon-refresh"
-              aria-label="Refresh nodes"
-              onClick={() => void nodesQuery.refetch()}
-            >
-              <RefreshCw size={13} />
-            </button>
-          )}
-          <button
-            className="fleet-close icon-refresh"
-            aria-label="Close connected nodes"
-            onClick={() => setFleetOpen(false)}
-          >
-            <X size={16} />
-          </button>
-        </div>
-        <p className="fleet-description">The machines behind your agent.</p>
-        {nodesQuery.error && (
-          <p className="error-banner" role="alert">
-            {errorText(nodesQuery.error)} Cached nodes may be stale.
-          </p>
-        )}
-        {connection && nodesQuery.isPending ? (
-          <p className="muted-note">Loading nodes…</p>
-        ) : nodes.length ? (
-          <div className="node-list">
-            {nodes.map((node) => (
-              <NodeCard
-                key={node.nodeId}
-                node={node}
-                pinned={routing === node.nodeId}
-                onPin={() => setRouting(node.nodeId)}
-                onSelectModel={(profileId) =>
-                  selectModel(node.nodeId, profileId)
-                }
-                disabled={submitting || !!pending || !!nodesQuery.error}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="empty-fleet">
-            <div className="empty-icon">
-              <Network size={28} />
+              </section>
             </div>
-            <h3>
-              {connection ? "No nodes registered" : "No backend connected"}
-            </h3>
-            <p>
-              {connection
-                ? "Start a node agent on a machine to make its models and enabled tools available here."
-                : "Connect your backend to discover your machines."}
-            </p>
-            <span className="waiting">
-              <Radio size={13} />
-              {connection ? "Checking every 3 seconds" : "Connection required"}
-            </span>
-          </div>
+          </>
         )}
-        <div className="routing-card">
-          <span className="routing-icon">
-            <Sparkles size={17} />
-          </span>
-          <h3>
-            {routing === "auto" ? "Auto routing" : "Explicit node routing"}
-          </h3>
-          <p>
-            {routing === "auto"
-              ? "Jev or permitted rules select among eligible machines."
-              : "Tasks stay pinned to this node. An unavailable node will not silently be replaced."}
-          </p>
-          <div>
-            <Check size={13} /> One continuous conversation
-          </div>
-          <div>
-            <Check size={13} /> Permissions checked before routing
-          </div>
-        </div>
-        <div className="fleet-footer">
-          <ShieldCheck size={15} />
-          <span>
-            Only explicitly enabled tools
-            <br />
-            are available to your agent.
-          </span>
-        </div>
-      </aside>
+      </main>
     </div>
   );
 }

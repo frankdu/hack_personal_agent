@@ -61,11 +61,13 @@ export function ChatMessage({
 
   return (
     <article className={`chat-message ${role}`}>
-      <div className="message-role">
-        {role === "user" ? "You" : "Curilo Agent"}
-        {status && <span>{status}</span>}
+      <div className="message-bubble">
+        <div className="message-role">
+          {role === "user" ? "You" : "Curilo Agent"}
+          {status && <span>{status}</span>}
+        </div>
+        <div className="message-text">{text}</div>
       </div>
-      <div className="message-text">{text}</div>
       <div
         className="message-actions"
         role="group"

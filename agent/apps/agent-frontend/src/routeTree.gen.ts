@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WorkspaceRouteImport } from './routes/_workspace'
 import { Route as WorkspaceIndexRouteImport } from './routes/_workspace.index'
+import { Route as WorkspaceMyCloudRouteImport } from './routes/_workspace.my-cloud'
 import { Route as WorkspaceConversationsConversationIdRouteImport } from './routes/_workspace.conversations.$conversationId'
 
 const WorkspaceRoute = WorkspaceRouteImport.update({
@@ -22,6 +23,11 @@ const WorkspaceIndexRoute = WorkspaceIndexRouteImport.update({
   path: '/',
   getParentRoute: () => WorkspaceRoute,
 } as any)
+const WorkspaceMyCloudRoute = WorkspaceMyCloudRouteImport.update({
+  id: '/my-cloud',
+  path: '/my-cloud',
+  getParentRoute: () => WorkspaceRoute,
+} as any)
 const WorkspaceConversationsConversationIdRoute =
   WorkspaceConversationsConversationIdRouteImport.update({
     id: '/conversations/$conversationId',
@@ -31,26 +37,30 @@ const WorkspaceConversationsConversationIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof WorkspaceIndexRoute
+  '/my-cloud': typeof WorkspaceMyCloudRoute
   '/conversations/$conversationId': typeof WorkspaceConversationsConversationIdRoute
 }
 export interface FileRoutesByTo {
+  '/my-cloud': typeof WorkspaceMyCloudRoute
   '/': typeof WorkspaceIndexRoute
   '/conversations/$conversationId': typeof WorkspaceConversationsConversationIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_workspace': typeof WorkspaceRouteWithChildren
+  '/_workspace/my-cloud': typeof WorkspaceMyCloudRoute
   '/_workspace/': typeof WorkspaceIndexRoute
   '/_workspace/conversations/$conversationId': typeof WorkspaceConversationsConversationIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/conversations/$conversationId'
+  fullPaths: '/' | '/my-cloud' | '/conversations/$conversationId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/conversations/$conversationId'
+  to: '/my-cloud' | '/' | '/conversations/$conversationId'
   id:
     | '__root__'
     | '/_workspace'
+    | '/_workspace/my-cloud'
     | '/_workspace/'
     | '/_workspace/conversations/$conversationId'
   fileRoutesById: FileRoutesById
@@ -75,6 +85,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkspaceIndexRouteImport
       parentRoute: typeof WorkspaceRoute
     }
+    '/_workspace/my-cloud': {
+      id: '/_workspace/my-cloud'
+      path: '/my-cloud'
+      fullPath: '/my-cloud'
+      preLoaderRoute: typeof WorkspaceMyCloudRouteImport
+      parentRoute: typeof WorkspaceRoute
+    }
     '/_workspace/conversations/$conversationId': {
       id: '/_workspace/conversations/$conversationId'
       path: '/conversations/$conversationId'
@@ -86,11 +103,13 @@ declare module '@tanstack/react-router' {
 }
 
 interface WorkspaceRouteChildren {
+  WorkspaceMyCloudRoute: typeof WorkspaceMyCloudRoute
   WorkspaceIndexRoute: typeof WorkspaceIndexRoute
   WorkspaceConversationsConversationIdRoute: typeof WorkspaceConversationsConversationIdRoute
 }
 
 const WorkspaceRouteChildren: WorkspaceRouteChildren = {
+  WorkspaceMyCloudRoute: WorkspaceMyCloudRoute,
   WorkspaceIndexRoute: WorkspaceIndexRoute,
   WorkspaceConversationsConversationIdRoute:
     WorkspaceConversationsConversationIdRoute,
