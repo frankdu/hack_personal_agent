@@ -6,28 +6,30 @@ From the workspace root, run `npm run dev:node`. Build with `npm run build -w @a
 
 ## Configuration
 
-| Variable                       | Default                             | Purpose                                                                                                                                      |
-| ------------------------------ | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MODE`                         | `DEV`                               | Exactly `DEV` or `PROD`                                                                                                                      |
-| `HOST`, `PORT`                 | `127.0.0.1`, `3101`                 | HTTP listener; container uses `HOST=0.0.0.0`                                                                                                 |
-| `NODE_NAME`                    | OS hostname                         | Display name; durable UUID lives under the state directory                                                                                   |
-| `NODE_STATE_DIR`               | `~/.curilo-agent/node-agent`        | Private identity, execution journal, SDK sessions and runtime records outside the workspace                                                  |
-| `AGENT_WORKSPACE_DIR`          | Process cwd                         | Approved workspace root, canonicalized at startup                                                                                            |
-| `WORKSPACE_ID`                 | `default`                           | Public workspace identifier                                                                                                                  |
-| `ENABLED_TOOLS`                | `read,bash,edit,write,grep,find,ls` | Comma-separated tool allowlist; an explicitly empty value disables all tools                                                                 |
-| `BACKEND_URL`                  | Unset                               | Backend HTTP(S) origin; without it the node remains unregistered                                                                             |
-| `NODE_ENDPOINT`                | `http://127.0.0.1:3101`             | Advertised origin; must match backend operator allowlist                                                                                     |
-| `NODE_SHARED_TOKEN`            | Unset                               | Shared initial bearer credential, at least 32 characters when enrolled                                                                       |
-| `RUNTIME_CONFIG`               | Unset                               | Operator-controlled local runtime manifest JSON path                                                                                         |
-| `MODEL_PROVIDER`, `MODEL_ID`   | Unset                               | Legacy paired model selector; runtime manifest is authoritative for served model identity, provider can override the local SDK provider name |
-| `OLLAMA_AUTO_DISCOVER`         | `true`                              | Discover and benchmark local installed models when `RUNTIME_CONFIG` is unset                                                                 |
-| `OLLAMA_URL`                   | `http://127.0.0.1:11434`            | Local loopback HTTP origin; no credentials, paths or remote hosts                                                                            |
-| `OLLAMA_MIN_TOKENS_PER_SECOND` | `20`                                | Minimum measured generation speed, at least 20                                                                                               |
-| `OLLAMA_MODEL_PRIORITY`        | Empty                               | Optional comma-separated exact IDs, ranked first; speed and capability checks still apply                                                    |
-| `OLLAMA_CONTEXT_WINDOW`        | `8192`                              | Upper bound on advertised context; capped by model metadata and configured `num_ctx` (conservative 4096 when unspecified)                    |
-| `OLLAMA_BENCHMARK_TIMEOUT_MS`  | `180000`                            | Timeout for each bounded benchmark request, including model loading                                                                          |
-| `OLLAMA_BENCHMARK_TTL_MS`      | `21600000`                          | Measurement cache lifetime, six hours by default                                                                                             |
-| `OLLAMA_REFRESH_INTERVAL_MS`   | `60000`                             | Idle inventory refresh interval                                                                                                              |
+| Variable                       | Default                                | Purpose                                                                                                                                      |
+| ------------------------------ | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MODE`                         | `DEV`                                  | Exactly `DEV` or `PROD`                                                                                                                      |
+| `HOST`, `PORT`                 | `127.0.0.1`, `3101`                    | HTTP listener; container uses `HOST=0.0.0.0`                                                                                                 |
+| `NODE_NAME`                    | OS hostname                            | Display name; durable UUID lives under the state directory                                                                                   |
+| `NODE_STATE_DIR`               | `~/.curilo-agent/node-agent`           | Private identity, execution journal, SDK sessions and runtime records outside the workspace                                                  |
+| `AGENT_WORKSPACE_DIR`          | `<process cwd>/default-chat-workspace` | Approved workspace root; default directory is created at startup, then canonicalized                                                         |
+| `WORKSPACE_ID`                 | `default`                              | Public workspace identifier                                                                                                                  |
+| `ENABLED_TOOLS`                | `read,bash,edit,write,grep,find,ls`    | Comma-separated tool allowlist; an explicitly empty value disables all tools                                                                 |
+| `BACKEND_URL`                  | Unset                                  | Backend HTTP(S) origin; without it the node remains unregistered                                                                             |
+| `NODE_ENDPOINT`                | `http://127.0.0.1:3101`                | Advertised origin; must match backend operator allowlist                                                                                     |
+| `NODE_SHARED_TOKEN`            | Unset                                  | Shared initial bearer credential, at least 32 characters when enrolled                                                                       |
+| `RUNTIME_CONFIG`               | Unset                                  | Operator-controlled local runtime manifest JSON path                                                                                         |
+| `MODEL_PROVIDER`, `MODEL_ID`   | Unset                                  | Legacy paired model selector; runtime manifest is authoritative for served model identity, provider can override the local SDK provider name |
+| `OLLAMA_AUTO_DISCOVER`         | `true`                                 | Discover and benchmark local installed models when `RUNTIME_CONFIG` is unset                                                                 |
+| `OLLAMA_URL`                   | `http://127.0.0.1:11434`               | Local loopback HTTP origin; no credentials, paths or remote hosts                                                                            |
+| `OLLAMA_MIN_TOKENS_PER_SECOND` | `20`                                   | Minimum measured generation speed, at least 20                                                                                               |
+| `OLLAMA_MODEL_PRIORITY`        | Empty                                  | Optional comma-separated exact IDs, ranked first; speed and capability checks still apply                                                    |
+| `OLLAMA_CONTEXT_WINDOW`        | `8192`                                 | Upper bound on advertised context; capped by model metadata and configured `num_ctx` (conservative 4096 when unspecified)                    |
+| `OLLAMA_BENCHMARK_TIMEOUT_MS`  | `180000`                               | Timeout for each bounded benchmark request, including model loading                                                                          |
+| `OLLAMA_BENCHMARK_TTL_MS`      | `21600000`                             | Measurement cache lifetime, six hours by default                                                                                             |
+| `OLLAMA_REFRESH_INTERVAL_MS`   | `60000`                                | Idle inventory refresh interval                                                                                                              |
+
+When `AGENT_WORKSPACE_DIR` is unset, empty, or whitespace-only, the node uses `default-chat-workspace` under its process working directory and creates it if necessary. Set a nonempty `AGENT_WORKSPACE_DIR` to use an existing project directory instead. Relative project paths resolve from the process working directory. The working directory is determined by how the node is launched (for example, its service configuration or npm workspace command).
 
 Keep state outside the tool workspace. Do not mount a Docker socket or provider credentials into the workspace. This release has a shared provisioning credential; per-node credentials and mTLS remain production work.
 

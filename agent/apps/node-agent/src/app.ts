@@ -42,6 +42,8 @@ async function acquire(stateDir: string, bootId: string) {
   };
 }
 export async function startNode(config: NodeConfig = readConfig()) {
+  if (config.workspaceDirIsDefault)
+    await mkdir(config.workspaceDir, { recursive: true });
   if (!(await stat(config.workspaceDir)).isDirectory())
     throw new Error("Workspace must be a directory");
   config = { ...config, workspaceDir: await realpath(config.workspaceDir) };

@@ -2,6 +2,8 @@
 
 Updated 2026-11-08. This is the first working colocated milestone, not completion of all acceptance criteria in the [research backlog](research-docs/implementation-tasks.md).
 
+The [node services and browser terminal refinement](SYSTEM_DESIGN.md) is design-only in this update. Independent serving enablement, authenticated Codex/Claude discovery and execution, the Gemma 4 deployment picker, and browser PTY/tmux are not implemented. Current automatic Ollama selection and manifest startup remain in place until the migration tasks land.
+
 | Area                  | Implemented                                                                                                                                                                     | Remaining                                                                                      |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | T01 protocol          | Strict versioned schemas/types, JSON Schema/OpenAPI generation, round-trip/rejection tests                                                                                      | Generated client package, evolution fixtures                                                   |

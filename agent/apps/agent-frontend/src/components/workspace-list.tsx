@@ -99,13 +99,13 @@ export function WorkspaceList({
           return (
             <li key={node.nodeId}>
               <div className="workspace-node-heading">
-                <span title={`Workspace@${node.name}`}>
-                  Workspace@{node.name}
+                <span title={`Projects@${node.name}`}>
+                  Projects@{node.name}
                 </span>
                 <button
                   type="button"
                   className="workspace-add"
-                  aria-label={`Add code repo to Workspace@${node.name}`}
+                  aria-label={`Add code repo to Projects@${node.name}`}
                   title="Add a code repo"
                   disabled={!repositories || !!error}
                   onClick={() => setAddingNode(node)}

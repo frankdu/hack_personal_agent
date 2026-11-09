@@ -629,8 +629,8 @@ function ChatWorkspace({
           disabled={active || submitting || !!pending}
           onRetry={() => void conversationsQuery.refetch()}
         />
-        <section className="settings-navigation" aria-label="Settings">
-          <div className="sidebar-label">SETTINGS</div>
+        <section className="fleet-navigation" aria-label="Manage fleet">
+          <div className="sidebar-label">MANAGE FLEET</div>
           <Link
             className={`nav-item connection-control ${isMyCloud ? "nav-active" : ""}`}
             to="/my-cloud"
@@ -669,7 +669,7 @@ function ChatWorkspace({
             <span className="breadcrumb">Workspace</span>
             <span className="slash">/</span>
             {isMyCloud
-              ? "My cloud"
+              ? "My agent cloud"
               : conversationId
                 ? "Conversation"
                 : "New conversation"}
@@ -689,7 +689,7 @@ function ChatWorkspace({
         {isMyCloud ? (
           <section className="cloud-page" aria-labelledby="fleet-heading">
             <div className="fleet-heading">
-              <h2 id="fleet-heading">Your nodes</h2>
+              <h2 id="fleet-heading">My agent cloud nodes</h2>
               <span className="count">
                 {onlineNodes.length}/{nodes.length}
               </span>

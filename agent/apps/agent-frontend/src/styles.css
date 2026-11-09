@@ -1288,7 +1288,7 @@ h1 {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.settings-navigation {
+.fleet-navigation {
   margin-bottom: 24px;
 }
 .repository-dialog {
@@ -1308,15 +1308,15 @@ h1 {
     max-height: 42dvh;
   }
   .workspace-navigation,
-  .settings-navigation {
+  .fleet-navigation {
     width: 100%;
     margin: 8px 0;
   }
   .workspace-navigation .sidebar-label,
-  .settings-navigation .sidebar-label {
+  .fleet-navigation .sidebar-label {
     display: block;
   }
-  .sidebar .settings-navigation .connection-control {
+  .sidebar .fleet-navigation .connection-control {
     display: flex;
     width: 100%;
     margin-left: 0;

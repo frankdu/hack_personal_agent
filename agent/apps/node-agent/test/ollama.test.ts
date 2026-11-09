@@ -508,6 +508,7 @@ test("model control endpoint requires node authentication and a current enrollme
   ]);
   const config = readConfig({
     NODE_STATE_DIR: join(f.stateDir, "node"),
+    AGENT_WORKSPACE_DIR: process.cwd(),
     NODE_SHARED_TOKEN: "test-node-control-token-long",
   });
   config.port = 0;
@@ -586,7 +587,10 @@ test("an incompatible winning endpoint falls back to the next passing model", as
 
 test("node startup advertises discovered profiles", async () => {
   const f = await fixture([{ name: "qwen3:8b", parameters: 8e9, speed: 40 }]);
-  const config = readConfig({ NODE_STATE_DIR: join(f.stateDir, "node") });
+  const config = readConfig({
+    NODE_STATE_DIR: join(f.stateDir, "node"),
+    AGENT_WORKSPACE_DIR: process.cwd(),
+  });
   config.port = 0;
   config.ollama = f.config;
   const node = await startNode(config);
@@ -627,6 +631,7 @@ test("an explicit runtime manifest takes precedence over automatic discovery", a
   );
   const config = readConfig({
     NODE_STATE_DIR: join(f.stateDir, "node"),
+    AGENT_WORKSPACE_DIR: process.cwd(),
     RUNTIME_CONFIG: path,
   });
   config.port = 0;

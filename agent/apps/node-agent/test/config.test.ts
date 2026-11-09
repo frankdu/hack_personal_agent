@@ -1,8 +1,22 @@
 import assert from "node:assert/strict";
-import { relative, isAbsolute } from "node:path";
+import { relative, isAbsolute, join, resolve } from "node:path";
 import { DEFAULT_CODING_TOOLS } from "@agent/contracts";
 import { test } from "vitest";
 import { readConfig } from "../src/config.js";
+
+test("missing or blank project directories use a dedicated default chat workspace", () => {
+  for (const value of [undefined, "", "   "]) {
+    const config = readConfig({ AGENT_WORKSPACE_DIR: value });
+    assert.equal(
+      config.workspaceDir,
+      join(process.cwd(), "default-chat-workspace"),
+    );
+    assert.equal(config.workspaceDirIsDefault, true);
+  }
+  const config = readConfig({ AGENT_WORKSPACE_DIR: "./project" });
+  assert.equal(config.workspaceDir, resolve("project"));
+  assert.equal(config.workspaceDirIsDefault, false);
+});
 
 test("coding tools default on, explicit restrictions work, SDK syntax cannot bypass the allowlist", () => {
   assert.deepEqual(readConfig({}).enabledTools, DEFAULT_CODING_TOOLS);

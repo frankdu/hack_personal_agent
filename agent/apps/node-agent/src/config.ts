@@ -29,6 +29,7 @@ export interface NodeConfig {
   name: string;
   stateDir: string;
   workspaceDir: string;
+  workspaceDirIsDefault: boolean;
   enabledTools: EnabledTool[];
   modelProvider?: string;
   modelId?: string;
@@ -128,7 +129,11 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): NodeConfig {
     stateDir: resolve(
       env.NODE_STATE_DIR ?? join(homedir(), ".curilo-agent", "node-agent"),
     ),
-    workspaceDir: resolve(env.AGENT_WORKSPACE_DIR ?? process.cwd()),
+    workspaceDir: resolve(
+      env.AGENT_WORKSPACE_DIR?.trim() ||
+        join(process.cwd(), "default-chat-workspace"),
+    ),
+    workspaceDirIsDefault: !env.AGENT_WORKSPACE_DIR?.trim(),
     enabledTools: [...new Set(requested)] as EnabledTool[],
     modelProvider,
     modelId,

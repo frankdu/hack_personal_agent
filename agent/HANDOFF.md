@@ -2,7 +2,11 @@
 
 The main working directory is `agent/`. The first colocated implementation is installed and passes build/typecheck/integration checks. Follow `research-docs/` for design and dependencies.
 
-## Accepted decisions
+## Latest design refinement
+
+The [node services and terminal design](SYSTEM_DESIGN.md) supersedes older deployment assumptions below: always-on control/discovery/shell, optional inference, authenticated Codex/Claude models, externally owned Ollama/vLLM, explicit NVIDIA-only Gemma 4 deployments, and browser PTY/tmux. This was a documentation-only update; runtime behavior and protocol code have not changed. Follow T26–T30 and the amended T05/T09/T25 work before claiming these features exist.
+
+## Prior milestone decisions (implementation baseline)
 
 - Jev from TypeSafe AI is the only intelligent routing provider for the initial milestone. Deterministic eligibility, manual pins and safe fallbacks remain backend responsibilities.
 - TypeScript backend, PostgreSQL audit/outbox, React/TanStack Start frontend, persistent Pi SDK node agents.
